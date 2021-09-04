@@ -62,7 +62,7 @@ mod tests {
     #[test]
     fn simple_return() {
         let mut chunk = Chunk::new();
-        chunk.write_chunk(OP_RETURN);
+        chunk.write_chunk(OP_RETURN, 1);
         let result = disassemble_chunk(&chunk, "test chunk");
         assert_eq!(
             result,
@@ -77,8 +77,8 @@ mod tests {
     fn simple_constant() {
         let mut chunk = Chunk::new();
         let constant = chunk.add_constant(1.2);
-        chunk.write_chunk(OP_CONSTANT);
-        chunk.write_chunk(constant);
+        chunk.write_chunk(OP_CONSTANT, 1);
+        chunk.write_chunk(constant, 1);
         let result = disassemble_chunk(&chunk, "test chunk");
         assert_eq!(
             result,
