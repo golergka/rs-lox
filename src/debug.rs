@@ -21,25 +21,14 @@ pub fn disassemble_chunk(chunk: &Chunk, name: &str) -> String {
 }
 
 fn disassemble_instruction(chunk: &Chunk, offset: usize) -> Option<(usize, String)> {
-    let mut description = String::new();
-    description.push_str(&format!("{:04} ", offset));
     let instruction = chunk.code.get(offset)?;
-    return match instruction {
-        &OP_CONSTANT => {
-            let (offset, instr_description) = constant_instruction("OP_CONSTANT", chunk, offset)?;
-            description.push_str(&instr_description);
-            Some((offset, description))
-        }
-        &OP_RETURN => {
-            let (offset, instr_description) = simple_instruction("OP_RETURN", offset);
-            description.push_str(&instr_description);
-            Some((offset, description))
-        }
-        _ => {
-            description.push_str(&format!("Unknown opcode {:?}", instruction));
-            Some((offset + 1, description))
-        }
+    let (new_offset, instr_description): (usize, String) = match instruction {
+        &OP_CONSTANT => constant_instruction("OP_CONSTANT", chunk, offset)?,
+        &OP_RETURN => simple_instruction("OP_RETURN", offset),
+        _ => (offset + 1, format!("Unknown opcode {:?}", instruction))
+        
     };
+    return Some((new_offset, format!("{:04} {}", offset, instr_description)));
 }
 
 fn simple_instruction(name: &str, offset: usize) -> (usize, String) {
