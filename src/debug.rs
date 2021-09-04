@@ -22,13 +22,20 @@ pub fn disassemble_chunk(chunk: &Chunk, name: &str) -> String {
 
 fn disassemble_instruction(chunk: &Chunk, offset: usize) -> Option<(usize, String)> {
     let instruction = chunk.code.get(offset)?;
+    let line = if offset > 0 && chunk.lines.get(offset - 1) == chunk.lines.get(offset) {
+        String::from("   | ")
+    } else {
+        format!("{:4} ", chunk.lines.get(offset)?)
+    };
     let (new_offset, instr_description): (usize, String) = match instruction {
         &OP_CONSTANT => constant_instruction("OP_CONSTANT", chunk, offset)?,
         &OP_RETURN => simple_instruction("OP_RETURN", offset),
-        _ => (offset + 1, format!("Unknown opcode {:?}", instruction))
-        
+        _ => (offset + 1, format!("Unknown opcode {:?}", instruction)),
     };
-    return Some((new_offset, format!("{:04} {}", offset, instr_description)));
+    return Some((
+        new_offset,
+        format!("{:04} {}{}", offset, line, instr_description),
+    ));
 }
 
 fn simple_instruction(name: &str, offset: usize) -> (usize, String) {
@@ -57,7 +64,7 @@ mod tests {
             result,
             String::from(
                 "== test chunk ==\n\
-                0000 OP_RETURN\n"
+                0000    1 OP_RETURN\n"
             )
         );
     }
@@ -73,7 +80,25 @@ mod tests {
             result,
             String::from(
                 "== test chunk ==\n\
-                0000 OP_CONSTANT 0 '1.2'\n"
+                0000    1 OP_CONSTANT 0 '1.2'\n"
+            )
+        );
+    }
+
+    #[test]
+    fn line_numbers() {
+        let mut chunk = Chunk::new();
+        let constant = chunk.add_constant(1.2);
+        chunk.write_chunk(OP_CONSTANT, 123);
+        chunk.write_chunk(constant, 123);
+        chunk.write_chunk(OP_RETURN, 123);
+        let result = disassemble_chunk(&chunk, "test chunk");
+        assert_eq!(
+            result,
+            String::from(
+                "== test chunk ==\n\
+                0000  123 OP_CONSTANT 0 '1.2'\n\
+                0002    | OP_RETURN\n"
             )
         );
     }
