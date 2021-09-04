@@ -6,7 +6,7 @@ pub fn disassemble_chunk(chunk: &Chunk, name: &str) -> String {
     let mut result = String::new();
     result.push_str(&format!("== {} ==\n", name));
     let mut offset = 0;
-    while offset < chunk.code.len() {
+    while offset < chunk.get_code().len() {
         let next_offset = disassemble_instruction(chunk, offset);
         match next_offset {
             None => break,
@@ -21,10 +21,10 @@ pub fn disassemble_chunk(chunk: &Chunk, name: &str) -> String {
 }
 
 fn disassemble_instruction(chunk: &Chunk, offset: usize) -> Option<(usize, String)> {
-    let instruction = chunk.code.get(offset)?;
+    let instruction = chunk.get_code()[offset];
     let (new_offset, instr_description): (usize, String) = match instruction {
-        &OP_CONSTANT => constant_instruction("OP_CONSTANT", chunk, offset)?,
-        &OP_RETURN => simple_instruction("OP_RETURN", offset),
+        OP_CONSTANT => constant_instruction("OP_CONSTANT", chunk, offset)?,
+        OP_RETURN => simple_instruction("OP_RETURN", offset),
         _ => (offset + 1, format!("Unknown opcode {:?}", instruction)),
     };
     return Some((
@@ -52,7 +52,7 @@ fn simple_instruction(name: &str, offset: usize) -> (usize, String) {
 }
 
 fn constant_instruction(name: &str, chunk: &Chunk, offset: usize) -> Option<(usize, String)> {
-    let constant = *chunk.code.get(offset + 1)?;
+    let constant = chunk.get_code()[offset + 1];
     let index: usize = constant.try_into().ok()?;
     let value: f32 = chunk.get_constant(index);
     let description = format!("{} {} '{}'", name, constant, print_value(value));
