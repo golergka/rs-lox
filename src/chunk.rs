@@ -1,4 +1,5 @@
 use crate::value::*;
+use crate::rle::*;
 use std::convert::TryInto;
 
 pub const OP_CONSTANT: u8 = 0;
@@ -7,7 +8,7 @@ pub const OP_RETURN: u8 = 1;
 pub struct Chunk {
     pub code: Vec<u8>,
     constants: ValueArray,
-    lines: Vec<u16>,
+    lines: Rle<u16>,
 }
 
 impl Chunk {
@@ -15,7 +16,7 @@ impl Chunk {
         Chunk {
             code: Vec::new(),
             constants: ValueArray::new(),
-            lines: Vec::new(),
+            lines: Rle::new(),
         }
     }
 
@@ -24,8 +25,8 @@ impl Chunk {
         self.lines.push(line);
     }
     
-    pub fn get_line(&self, offset: usize) -> u16 {
-        self.lines[offset]
+    pub fn get_line(&self, offset: usize) -> Option<&u16> {
+        self.lines.get(offset)
     }
 
     pub fn add_constant(&mut self, value: Value) -> u8 {

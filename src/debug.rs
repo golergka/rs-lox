@@ -39,8 +39,8 @@ fn disassemble_instruction(chunk: &Chunk, offset: usize) -> Option<(usize, Strin
 }
 
 fn line_info(chunk: &Chunk, offset: usize) -> String {
-    let cur_line = chunk.get_line(offset);
-    if offset > 0 && cur_line == chunk.get_line(offset - 1) {
+    let cur_line = chunk.get_line(offset).unwrap();
+    if offset > 0 && cur_line == chunk.get_line(offset - 1).unwrap() {
         return String::from("   | ");
     } else {
         return format!("{:4} ", cur_line);

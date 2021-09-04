@@ -1,6 +1,7 @@
 mod chunk;
 mod debug;
 mod value;
+mod rle;
 
 use std::error::Error;
 use chunk::*;
