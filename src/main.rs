@@ -8,7 +8,9 @@ use debug::*;
 
 fn main() -> Result<(), Box<dyn Error>> {
     let mut chunk = Chunk::new();
-    chunk.code.push(OpCode::OpReturn);
+    let constant = chunk.add_constant(1.2);
+    chunk.write_chunk(OP_CONSTANT);
+    chunk.write_chunk(constant);
     print!("{}", disassemble_chunk(&chunk, "test chunk"));
     Ok(())
 }

@@ -1,11 +1,11 @@
+use std::convert::TryInto;
 use crate::value::*;
 
-pub enum OpCode {
-    OpReturn
-}
+pub const OP_CONSTANT: u8 = 0;
+pub const OP_RETURN: u8 = 1;
 
 pub struct Chunk {
-    pub code: Vec<OpCode>,
+    pub code: Vec<u8>,
     pub constants: ValueArray
 }
 
@@ -18,8 +18,12 @@ impl Chunk {
         }
     }
 
-    pub fn add_constant(&mut self, value: Value) -> usize {
+    pub fn write_chunk(&mut self, op: u8) {
+        self.code.push(op);
+    }
+
+    pub fn add_constant(&mut self, value: Value) -> u8 {
         self.constants.push(value);
-        return self.constants.len() - 1;
+        return (self.constants.len() - 1).try_into().unwrap();
     }
 }
