@@ -1,12 +1,14 @@
 use crate::value::*;
 use crate::rle::*;
-use std::convert::TryInto;
+use std::convert::TryFrom;
 
-pub const OP_CONSTANT: u8 = 0;
-pub const OP_RETURN: u8 = 1;
+pub const OP_RETURN: u8 = 0;
+pub const OP_CONSTANT: u8 = 1;
+pub const OP_CONSTANT_LONG: u8 = 2;
 
 pub type LineNumber = u16;
 
+#[derive(Debug)]
 pub struct Chunk {
     code: Vec<u8>,
     constants: ValueArray,
@@ -27,6 +29,21 @@ impl Chunk {
         self.lines.push(line);
     }
     
+    pub fn write_short(&mut self, value: u16, line: LineNumber) {
+        // LITTLE ENDIAN
+        let [a, b] = value.to_be_bytes();
+        self.code.push(a);
+        self.code.push(b);
+        self.lines.push(line);
+        self.lines.push(line);
+    }
+    
+    pub fn read_short(&self, index: usize) -> u16 {
+        let a = self.code[index];
+        let b = self.code[index + 1];
+        u16::from_be_bytes([a, b])
+    }
+    
     pub fn get_code(&self) -> &[u8] {
         &self.code
     }
@@ -35,15 +52,22 @@ impl Chunk {
         self.lines.get(offset)
     }
 
-    fn add_constant(&mut self, value: Value) -> u8 {
+    fn add_constant(&mut self, value: Value) -> usize {
         self.constants.push(value);
-        return (self.constants.len() - 1).try_into().unwrap();
+        return self.constants.len() - 1
     }
     
     pub fn write_constant(&mut self, value: Value, line: LineNumber) {
         let constant = self.add_constant(value);
-        self.write_chunk(OP_CONSTANT, line);
-        self.write_chunk(constant, line);
+        if let Ok(op) = u8::try_from(constant) {
+            self.write_chunk(OP_CONSTANT, line);
+            self.write_chunk(op, line);
+        } else if let Ok(op) = u16::try_from(constant) {
+            self.write_chunk(OP_CONSTANT_LONG, line);
+            self.write_short(op, line);
+        } else {
+            panic!("Can't support more than 65 536 constants");
+        }
     }
     
     pub fn get_constant(&self, offset: usize) -> Value {
@@ -96,4 +120,15 @@ mod tests {
         assert_eq!(chunk.get_constant(0), 1.2);
     }
 
+    #[test]
+    fn writes_300_constants() {
+        let mut chunk = Chunk::new();
+        for i in 0..300 {
+            chunk.write_constant(i as f32, i);
+        }
+        for i in 0..300 {
+            assert_eq!(chunk.get_constant(i), i as f32);
+        }
+    }
+        
 }

@@ -24,6 +24,7 @@ fn disassemble_instruction(chunk: &Chunk, offset: usize) -> Option<(usize, Strin
     let instruction = chunk.get_code()[offset];
     let (new_offset, instr_description): (usize, String) = match instruction {
         OP_CONSTANT => constant_instruction("OP_CONSTANT", chunk, offset)?,
+        OP_CONSTANT_LONG => constant_long_instruction("OP_CONSTANT_LONG", chunk, offset)?,
         OP_RETURN => simple_instruction("OP_RETURN", offset),
         _ => (offset + 1, format!("Unknown opcode {:?}", instruction)),
     };
@@ -47,7 +48,7 @@ fn line_info(chunk: &Chunk, offset: usize) -> String {
     }
 }
 
-fn simple_instruction(name: &str, offset: usize) -> (usize, String) {
+fn simple_instruction(name:&str, offset: usize) -> (usize, String) {
     return (offset + 1, format!("{}", name));
 }
 
@@ -57,6 +58,14 @@ fn constant_instruction(name: &str, chunk: &Chunk, offset: usize) -> Option<(usi
     let value: f32 = chunk.get_constant(index);
     let description = format!("{} {} '{}'", name, constant, print_value(value));
     return Some((offset + 2, description));
+}
+
+fn constant_long_instruction(name: &str, chunk: &Chunk, offset: usize) -> Option<(usize, String)> {
+    let constant = chunk.read_short(offset + 1);
+    let index: usize = constant.try_into().ok()?;
+    let value: f32 = chunk.get_constant(index);
+    let description = format!("{} {} '{}'", name, constant, print_value(value));
+    return Some((offset + 3, description));
 }
 
 #[cfg(test)]
@@ -90,6 +99,23 @@ mod tests {
                 0000    1 OP_CONSTANT 0 '1.2'\n"
             )
         );
+    }
+    
+    #[test]
+    fn long_constant() {
+        let mut chunk = Chunk::new();
+        for i in 0..300 {
+            chunk.write_constant(i as f32, i);
+        }
+        let mut target_result = String::from("== test chunk ==\n");
+        for i in 0..256 {
+            target_result.push_str(&format!("{:04} {:4} OP_CONSTANT {} '{}'\n", i*2, i, i, print_value(i as f32)));
+        }
+        for i in 256..300 {
+            target_result.push_str(&format!("{:04} {:4} OP_CONSTANT_LONG {} '{}'\n", 509+3*(i-255), i, i, print_value(i as f32)));
+        }
+        let result = disassemble_chunk(&chunk, "test chunk");
+        assert_eq!(result, target_result);
     }
 
     #[test]
