@@ -6,8 +6,8 @@ pub const OP_RETURN: u8 = 1;
 
 pub struct Chunk {
     pub code: Vec<u8>,
-    pub constants: ValueArray,
-    pub lines: Vec<u16>,
+    constants: ValueArray,
+    lines: Vec<u16>,
 }
 
 impl Chunk {
@@ -23,9 +23,17 @@ impl Chunk {
         self.code.push(op);
         self.lines.push(line);
     }
+    
+    pub fn get_line(&self, offset: usize) -> u16 {
+        self.lines[offset]
+    }
 
     pub fn add_constant(&mut self, value: Value) -> u8 {
         self.constants.push(value);
         return (self.constants.len() - 1).try_into().unwrap();
+    }
+    
+    pub fn get_constant(&self, offset: usize) -> Value {
+        self.constants[offset]
     }
 }

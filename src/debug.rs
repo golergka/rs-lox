@@ -22,11 +22,6 @@ pub fn disassemble_chunk(chunk: &Chunk, name: &str) -> String {
 
 fn disassemble_instruction(chunk: &Chunk, offset: usize) -> Option<(usize, String)> {
     let instruction = chunk.code.get(offset)?;
-    let line = if offset > 0 && chunk.lines.get(offset - 1) == chunk.lines.get(offset) {
-        String::from("   | ")
-    } else {
-        format!("{:4} ", chunk.lines.get(offset)?)
-    };
     let (new_offset, instr_description): (usize, String) = match instruction {
         &OP_CONSTANT => constant_instruction("OP_CONSTANT", chunk, offset)?,
         &OP_RETURN => simple_instruction("OP_RETURN", offset),
@@ -34,8 +29,22 @@ fn disassemble_instruction(chunk: &Chunk, offset: usize) -> Option<(usize, Strin
     };
     return Some((
         new_offset,
-        format!("{:04} {}{}", offset, line, instr_description),
+        format!(
+            "{:04} {}{}",
+            offset,
+            line_info(chunk, offset),
+            instr_description
+        ),
     ));
+}
+
+fn line_info(chunk: &Chunk, offset: usize) -> String {
+    let cur_line = chunk.get_line(offset);
+    if offset > 0 && cur_line == chunk.get_line(offset - 1) {
+        return String::from("   | ");
+    } else {
+        return format!("{:4} ", cur_line);
+    }
 }
 
 fn simple_instruction(name: &str, offset: usize) -> (usize, String) {
@@ -45,7 +54,7 @@ fn simple_instruction(name: &str, offset: usize) -> (usize, String) {
 fn constant_instruction(name: &str, chunk: &Chunk, offset: usize) -> Option<(usize, String)> {
     let constant = *chunk.code.get(offset + 1)?;
     let index: usize = constant.try_into().ok()?;
-    let value: f32 = *chunk.constants.get(index)?;
+    let value: f32 = chunk.get_constant(index);
     let description = format!("{} {} '{}'", name, constant, print_value(value));
     return Some((offset + 2, description));
 }
