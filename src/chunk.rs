@@ -1,5 +1,5 @@
 pub enum OpCode {
-    OP_RETURN
+    OpReturn
 }
 
 pub type Chunk = Vec<OpCode>;
