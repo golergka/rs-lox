@@ -4,7 +4,7 @@ pub fn disassemble_chunk(chunk: &Chunk, name: &str) -> String {
     let mut result = String::new();
     result.push_str(&format!("== {} ==\n", name));
     let mut offset = 0;
-    while offset < chunk.len() {
+    while offset < chunk.code.len() {
         let next_offset = disassemble_instruction(chunk, offset);
         match next_offset {
             None => break,
@@ -21,7 +21,7 @@ pub fn disassemble_chunk(chunk: &Chunk, name: &str) -> String {
 fn disassemble_instruction(chunk: &Chunk, offset: usize) -> Option<(usize, String)> {
     let mut result = String::new();
     result.push_str(&format!("{:04} ", offset));
-    let instruction = chunk.get(offset)?;
+    let instruction = chunk.code.get(offset)?;
     return match instruction {
         OpCode::OpReturn => {
             let (offset, description) = simple_instruction("OP_RETURN", offset);
@@ -42,7 +42,8 @@ mod tests {
 
     #[test]
     fn simple_return() {
-        let chunk = vec![OpCode::OpReturn];
+        let mut chunk = Chunk::new();
+        chunk.code.push(OpCode::OpReturn);
         let result = disassemble_chunk(&chunk, "test chunk");
         assert_eq!(result, String::from(
             "== test chunk ==\n\
