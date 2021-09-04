@@ -48,7 +48,7 @@ fn line_info(chunk: &Chunk, offset: usize) -> String {
     }
 }
 
-fn simple_instruction(name:&str, offset: usize) -> (usize, String) {
+fn simple_instruction(name: &str, offset: usize) -> (usize, String) {
     return (offset + 1, format!("{}", name));
 }
 
@@ -100,7 +100,7 @@ mod tests {
             )
         );
     }
-    
+
     #[test]
     fn long_constant() {
         let mut chunk = Chunk::new();
@@ -109,10 +109,22 @@ mod tests {
         }
         let mut target_result = String::from("== test chunk ==\n");
         for i in 0..256 {
-            target_result.push_str(&format!("{:04} {:4} OP_CONSTANT {} '{}'\n", i*2, i, i, print_value(i as f32)));
+            target_result.push_str(&format!(
+                "{:04} {:4} OP_CONSTANT {} '{}'\n",
+                i * 2,
+                i,
+                i,
+                print_value(i as f32)
+            ));
         }
         for i in 256..300 {
-            target_result.push_str(&format!("{:04} {:4} OP_CONSTANT_LONG {} '{}'\n", 509+3*(i-255), i, i, print_value(i as f32)));
+            target_result.push_str(&format!(
+                "{:04} {:4} OP_CONSTANT_LONG {} '{}'\n",
+                509 + 3 * (i - 255),
+                i,
+                i,
+                print_value(i as f32)
+            ));
         }
         let result = disassemble_chunk(&chunk, "test chunk");
         assert_eq!(result, target_result);

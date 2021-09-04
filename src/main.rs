@@ -1,11 +1,11 @@
 mod chunk;
 mod debug;
-mod value;
 mod rle;
+mod value;
 
-use std::error::Error;
 use chunk::*;
 use debug::*;
+use std::error::Error;
 
 fn main() -> Result<(), Box<dyn Error>> {
     let mut chunk = Chunk::new();

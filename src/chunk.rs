@@ -1,5 +1,5 @@
-use crate::value::*;
 use crate::rle::*;
+use crate::value::*;
 use std::convert::TryFrom;
 
 pub const OP_RETURN: u8 = 0;
@@ -23,12 +23,12 @@ impl Chunk {
             lines: Rle::new(),
         }
     }
-    
+
     pub fn write_chunk(&mut self, op: u8, line: LineNumber) {
         self.code.push(op);
         self.lines.push(line);
     }
-    
+
     pub fn write_short(&mut self, value: u16, line: LineNumber) {
         // LITTLE ENDIAN
         let [a, b] = value.to_be_bytes();
@@ -37,26 +37,26 @@ impl Chunk {
         self.lines.push(line);
         self.lines.push(line);
     }
-    
+
     pub fn read_short(&self, index: usize) -> u16 {
         let a = self.code[index];
         let b = self.code[index + 1];
         u16::from_be_bytes([a, b])
     }
-    
+
     pub fn get_code(&self) -> &[u8] {
         &self.code
     }
-    
+
     pub fn get_line(&self, offset: usize) -> Option<&LineNumber> {
         self.lines.get(offset)
     }
 
     fn add_constant(&mut self, value: Value) -> usize {
         self.constants.push(value);
-        return self.constants.len() - 1
+        return self.constants.len() - 1;
     }
-    
+
     pub fn write_constant(&mut self, value: Value, line: LineNumber) {
         let constant = self.add_constant(value);
         if let Ok(op) = u8::try_from(constant) {
@@ -69,7 +69,7 @@ impl Chunk {
             panic!("Can't support more than 65 536 constants");
         }
     }
-    
+
     pub fn get_constant(&self, offset: usize) -> Value {
         self.constants[offset]
     }
@@ -111,7 +111,7 @@ mod tests {
         chunk.add_constant(1.2);
         assert_eq!(chunk.get_constant(0), 1.2);
     }
-    
+
     #[test]
     fn writes_constant() {
         let mut chunk = Chunk::new();
@@ -130,5 +130,4 @@ mod tests {
             assert_eq!(chunk.get_constant(i), i as f32);
         }
     }
-        
 }
