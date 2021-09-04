@@ -81,9 +81,7 @@ mod tests {
     #[test]
     fn simple_constant() {
         let mut chunk = Chunk::new();
-        let constant = chunk.add_constant(1.2);
-        chunk.write_chunk(OP_CONSTANT, 1);
-        chunk.write_chunk(constant, 1);
+        chunk.write_constant(1.2, 1);
         let result = disassemble_chunk(&chunk, "test chunk");
         assert_eq!(
             result,
@@ -97,9 +95,7 @@ mod tests {
     #[test]
     fn line_numbers() {
         let mut chunk = Chunk::new();
-        let constant = chunk.add_constant(1.2);
-        chunk.write_chunk(OP_CONSTANT, 123);
-        chunk.write_chunk(constant, 123);
+        chunk.write_constant(1.2, 123);
         chunk.write_chunk(OP_RETURN, 123);
         let result = disassemble_chunk(&chunk, "test chunk");
         assert_eq!(

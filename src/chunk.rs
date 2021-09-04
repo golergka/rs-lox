@@ -5,10 +5,12 @@ use std::convert::TryInto;
 pub const OP_CONSTANT: u8 = 0;
 pub const OP_RETURN: u8 = 1;
 
+pub type LineNumber = u16;
+
 pub struct Chunk {
     code: Vec<u8>,
     constants: ValueArray,
-    lines: Rle<u16>,
+    lines: Rle<LineNumber>,
 }
 
 impl Chunk {
@@ -20,7 +22,7 @@ impl Chunk {
         }
     }
     
-    pub fn write_chunk(&mut self, op: u8, line: u16) {
+    pub fn write_chunk(&mut self, op: u8, line: LineNumber) {
         self.code.push(op);
         self.lines.push(line);
     }
@@ -29,13 +31,19 @@ impl Chunk {
         &self.code
     }
     
-    pub fn get_line(&self, offset: usize) -> Option<&u16> {
+    pub fn get_line(&self, offset: usize) -> Option<&LineNumber> {
         self.lines.get(offset)
     }
 
-    pub fn add_constant(&mut self, value: Value) -> u8 {
+    fn add_constant(&mut self, value: Value) -> u8 {
         self.constants.push(value);
         return (self.constants.len() - 1).try_into().unwrap();
+    }
+    
+    pub fn write_constant(&mut self, value: Value, line: LineNumber) {
+        let constant = self.add_constant(value);
+        self.write_chunk(OP_CONSTANT, line);
+        self.write_chunk(constant, line);
     }
     
     pub fn get_constant(&self, offset: usize) -> Value {
@@ -74,9 +82,17 @@ mod tests {
     }
 
     #[test]
-    fn returns_correct_constant() {
+    fn adds_correct_constant() {
         let mut chunk = Chunk::new();
         chunk.add_constant(1.2);
+        assert_eq!(chunk.get_constant(0), 1.2);
+    }
+    
+    #[test]
+    fn writes_constant() {
+        let mut chunk = Chunk::new();
+        chunk.write_constant(1.2, 1);
+        assert_eq!(chunk.get_code(), &[OP_CONSTANT, 0]);
         assert_eq!(chunk.get_constant(0), 1.2);
     }
 
