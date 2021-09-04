@@ -1,6 +1,6 @@
 use std::cmp::Eq;
-use std::marker::Copy;
 use std::fmt::Debug;
+use std::marker::Copy;
 
 #[derive(Debug)]
 pub struct Rle<T: Eq + Debug + Copy> {
@@ -15,7 +15,6 @@ struct RleNode<T> {
 }
 
 impl<T: Eq + Debug + Copy> Rle<T> {
-
     pub fn new() -> Rle<T> {
         Rle {
             data: Vec::new(),
