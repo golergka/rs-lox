@@ -68,6 +68,14 @@ pub struct Scanner<'a> {
     line: LineNumber,
 }
 
+fn is_digit(c: char) -> bool {
+    c >= '0' && c <= '9'
+}
+
+fn is_alpha(c: char) -> bool {
+    (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || c == '_'
+}
+
 impl Scanner<'_> {
     pub fn new(input: &String) -> Scanner {
         Scanner {
@@ -104,6 +112,15 @@ impl Scanner<'_> {
             return false;
         }
     }
+    fn match_while(&mut self, filter: fn(char) -> bool) {
+        while let Some(c) = self.peek() {
+            if filter(c) {
+                self.advance();
+            } else {
+                break;
+            }
+        }
+    }
     fn skip_whitespace(&mut self) {
         while let Some(c) = self.peek() {
             match c {
@@ -118,7 +135,7 @@ impl Scanner<'_> {
                 }
                 // Comments
                 '/' => {
-                    if self.r#match('/') {
+                    if Some('/') == self.peek_next() {
                         while let Some(c) = self.peek() {
                             match c {
                                 '\n' => {
@@ -157,30 +174,67 @@ impl Scanner<'_> {
         }
         self.error_token("Unterminated string.")
     }
-    fn advance_digits(&mut self) {
-        while let Some(c) = self.peek() {
-            match c {
-                '0'..='9' => {
-                    self.advance();
-                }
-                _ => break,
-            }
-        }
-    }
     fn number(&mut self) -> Token {
-        self.advance_digits();
+        self.match_while(is_digit);
         if let Some(c) = self.peek() {
             if c == '.' {
                 if let Some(c) = self.peek_next() {
-                    if let '0'..='9' = c {
+                    if is_digit(c) {
                         // Consume the '.'
                         self.advance();
-                        self.advance_digits();
+                        self.match_while(is_digit);
                     }
                 }
             }
         }
         self.make_token(TokenKind::Number)
+    }
+    fn check_keyword(&self, start: usize, keyword: &str, kind: TokenKind) -> TokenKind {
+        if &self.input[self.start + start..self.current] == keyword {
+            kind
+        } else {
+            TokenKind::Identifier
+        }
+    }
+    fn identifier_type(&self) -> TokenKind {
+        match self.input.chars().nth(self.start).unwrap() {
+            'a' => return self.check_keyword(1, "nd", TokenKind::And),
+            'c' => return self.check_keyword(1, "lass", TokenKind::Class),
+            'e' => return self.check_keyword(1, "lse", TokenKind::Else),
+            'f' => {
+                if self.current - self.start > 1 {
+                    match self.input.chars().nth(self.start + 1).unwrap() {
+                        'a' => return self.check_keyword(2, "lse", TokenKind::False),
+                        'o' => return self.check_keyword(2, "r", TokenKind::For),
+                        'u' => return self.check_keyword(2, "n", TokenKind::Fun),
+                        _ => {}
+                    }
+                }
+            }
+            'i' => return self.check_keyword(1, "f", TokenKind::If),
+            'n' => return self.check_keyword(1, "il", TokenKind::Nil),
+            'o' => return self.check_keyword(1, "r", TokenKind::Or),
+            'p' => return self.check_keyword(1, "rint", TokenKind::Print),
+            'r' => return self.check_keyword(1, "eturn", TokenKind::Return),
+            't' => {
+                if self.current - self.start > 1 {
+                    match self.input.chars().nth(self.start + 1).unwrap() {
+                        'h' => return self.check_keyword(2, "is", TokenKind::This),
+                        'r' => return self.check_keyword(2, "ue", TokenKind::True),
+                        _ => {}
+                    }
+                }
+            }
+            's' => return self.check_keyword(1, "uper", TokenKind::Super),
+            'v' => return self.check_keyword(1, "ar", TokenKind::Var),
+            'w' => return self.check_keyword(1, "hile", TokenKind::While),
+            _ => {}
+        };
+        return TokenKind::Identifier;
+    }
+    fn identifier(&mut self) -> Token {
+        self.match_while(|c| is_alpha(c) || is_digit(c));
+        self.make_token(self.identifier_type())
     }
     pub fn scan(&mut self) -> Token {
         self.skip_whitespace();
@@ -232,8 +286,9 @@ impl Scanner<'_> {
                 }
                 // Literals
                 '"' => self.string(),
-                '0'..='9' => self.number(),
-                _ => self.error_token("Unexpected character"),
+                _ if is_digit(c) => self.number(),
+                _ if is_alpha(c) => self.identifier(),
+                _ => self.error_token("Unexpected character."),
             },
         }
     }
@@ -450,6 +505,27 @@ mod tests {
             assert_eq!(result.lexeme, "foobar");
             assert_eq!(result.line, 1);
         }
+        
+        #[test]
+        fn identifier_with_underscore() {
+            let input = String::from("foo_bar");
+            let mut scanner = Scanner::new(&input);
+            let result = scanner.scan();
+            assert_eq!(result.kind, TokenKind::Identifier);
+            assert_eq!(result.lexeme, "foo_bar");
+            assert_eq!(result.line, 1);
+        }
+
+        #[test]
+        fn identifier_with_digit() {
+            let input = String::from("foo1");
+            let mut scanner = Scanner::new(&input);
+            let result = scanner.scan();
+            assert_eq!(result.kind, TokenKind::Identifier);
+            assert_eq!(result.lexeme, "foo1");
+            assert_eq!(result.line, 1);
+        }
+
         #[test]
         fn string() {
             let input = String::from("\"foobar\"");
@@ -708,7 +784,7 @@ mod tests {
         let mut scanner = Scanner::new(&input);
         let result = scanner.scan();
         assert_eq!(result.kind, TokenKind::Var);
-        assert_eq!(result.lexeme, "let");
+        assert_eq!(result.lexeme, "var");
         assert_eq!(result.line, 1);
         let result = scanner.scan();
         assert_eq!(result.kind, TokenKind::Identifier);
@@ -738,7 +814,7 @@ mod tests {
         let mut scanner = Scanner::new(&input);
         let result = scanner.scan();
         assert_eq!(result.kind, TokenKind::Var);
-        assert_eq!(result.lexeme, "let");
+        assert_eq!(result.lexeme, "var");
         assert_eq!(result.line, 1);
         let result = scanner.scan();
         assert_eq!(result.kind, TokenKind::Identifier);
@@ -758,7 +834,7 @@ mod tests {
         assert_eq!(result.line, 1);
         let result = scanner.scan();
         assert_eq!(result.kind, TokenKind::Var);
-        assert_eq!(result.lexeme, "let");
+        assert_eq!(result.lexeme, "var");
         assert_eq!(result.line, 2);
         let result = scanner.scan();
         assert_eq!(result.kind, TokenKind::Identifier);
