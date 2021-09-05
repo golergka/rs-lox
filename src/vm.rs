@@ -1,10 +1,21 @@
 use crate::chunk::*;
 use crate::debug::*;
 use crate::value::*;
+use std::fmt;
+use std::io;
 
-#[derive(Debug)]
-pub struct VMConfig {
+pub struct VMConfig<'a> {
     pub trace_execution: bool,
+    pub stdout: &'a mut dyn io::Write,
+}
+
+impl std::fmt::Debug for VMConfig<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        return f
+            .debug_struct("VMConfig")
+            .field("trace_execution", &self.trace_execution)
+            .finish();
+    }
 }
 
 pub const STACK_MAX: usize = 256;
@@ -12,7 +23,7 @@ pub const STACK_MAX: usize = 256;
 pub struct VM<'a> {
     chunk: &'a Chunk,
     ip: usize,
-    config: VMConfig,
+    config: VMConfig<'a>,
     stack: [Value; STACK_MAX],
     stack_top: usize,
 }
@@ -24,8 +35,22 @@ pub enum InterpreterError {
 
 pub type InterpreterResult = Result<(), InterpreterError>;
 
+macro_rules! vm_print {
+    ($dst:expr, $($arg:tt)*) => (
+        $dst
+            .config
+            .stdout
+            .write_fmt(std::format_args!($($arg)*))
+            .map_err(|_| {
+                InterpreterError::RuntimeError(
+                    format!("Failed to write to stdout")
+                )
+            })?
+    );
+}
+
 impl<'a> VM<'a> {
-    pub fn new(config: VMConfig, chunk: &'a Chunk) -> Self {
+    pub fn new(config: VMConfig<'a>, chunk: &'a Chunk) -> Self {
         VM {
             chunk,
             ip: 0,
@@ -92,29 +117,30 @@ impl<'a> VM<'a> {
         return Ok(self.chunk.get_constant(s as usize));
     }
 
-    fn trace_instruction(&self) {
-        print!("          ");
+    fn trace_instruction(&mut self) -> InterpreterResult {
+        vm_print!(self, "          ");
         for i in 0..self.stack_top {
-            print!("[{}]", print_value(self.stack[i]));
+            vm_print!(self, "[{}]", print_value(self.stack[i]));
         }
-        print!("\n");
+        vm_print!(self, "\n");
         if let Some((_, decription)) = disassemble_instruction(self.chunk, self.ip) {
-            println!("{}", decription);
+            vm_print!(self, "{}\n", decription);
         } else {
-            println!("[END OF CHUNK]");
+            vm_print!(self, "[END OF CHUNK]\n");
         }
+        return Ok(());
     }
 
     pub fn run(&mut self) -> InterpreterResult {
         loop {
             if self.config.trace_execution {
-                self.trace_instruction();
+                self.trace_instruction()?;
             }
             let instruction = self.read_byte()?;
             match instruction {
                 OP_RETURN => {
                     let value = self.stack_pop()?;
-                    println!("{}", print_value(value));
+                    vm_print!(self, "{}\n", print_value(value));
                     return Ok(());
                 }
                 OP_CONSTANT => {
@@ -125,6 +151,10 @@ impl<'a> VM<'a> {
                     let constant = self.read_constant_long()?;
                     self.stack_push(constant)?;
                 }
+                OP_NEGATE => {
+                    let value = self.stack_pop()?;
+                    self.stack_push(-value)?;
+                }
                 _ => {
                     return Err(InterpreterError::RuntimeError(format!(
                         "Unknown opcode: {}",
@@ -132,6 +162,9 @@ impl<'a> VM<'a> {
                     )))
                 }
             }
+            self.config.stdout.flush().map_err(|_| {
+                InterpreterError::RuntimeError(format!("Failed to write to stdout"))
+            })?;
         }
     }
 }
@@ -139,14 +172,51 @@ impl<'a> VM<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::str;
+
+    struct StringAdapter<'a> {
+        f: &'a mut String,
+    }
+
+    impl<'a> io::Write for StringAdapter<'a> {
+        fn write(&mut self, b: &[u8]) -> Result<usize, io::Error> {
+            use std::fmt::Write;
+            let s = str::from_utf8(b).map_err(|_| io::Error::from(io::ErrorKind::Other))?;
+            self.f
+                .write_str(s)
+                .map_err(|_| io::Error::from(io::ErrorKind::Other))?;
+            Ok(b.len())
+        }
+
+        fn flush(&mut self) -> Result<(), io::Error> {
+            Ok(())
+        }
+    }
+
+    struct PrintAdapter {}
+
+    impl io::Write for PrintAdapter {
+        fn write(&mut self, b: &[u8]) -> Result<usize, io::Error> {
+            let s = str::from_utf8(b).map_err(|_| io::Error::from(io::ErrorKind::Other))?;
+            println!("{}", s);
+            Ok(b.len())
+        }
+
+        fn flush(&mut self) -> Result<(), io::Error> {
+            Ok(())
+        }
+    }
 
     #[test]
     fn return_wo_constant() {
         let mut chunk = Chunk::new();
         chunk.write_chunk(OP_RETURN, 1);
+        let mut output = String::new();
+        let mut adapter = StringAdapter { f: &mut output };
         let mut vm = VM::new(
             VMConfig {
                 trace_execution: true,
+                stdout: &mut adapter,
             },
             &chunk,
         );
@@ -157,15 +227,23 @@ mod tests {
                 "Stack underflow"
             )))
         );
+        assert_eq!(
+            output,
+            "          \n\
+            0000    1 OP_RETURN\n"
+        );
     }
 
     #[test]
     fn constant_wo_return() {
         let mut chunk = Chunk::new();
         chunk.write_constant(1.2, 1);
+        let mut adapter = PrintAdapter {};
+        println!("test2");
         let mut vm = VM::new(
             VMConfig {
                 trace_execution: true,
+                stdout: &mut adapter,
             },
             &chunk,
         );
@@ -184,9 +262,11 @@ mod tests {
         for i in 0..257 {
             chunk.write_constant(i as f32, i);
         }
+        let mut adapter = PrintAdapter {};
         let mut vm = VM::new(
             VMConfig {
                 trace_execution: true,
+                stdout: &mut adapter,
             },
             &chunk,
         );
@@ -204,13 +284,35 @@ mod tests {
         let mut chunk = Chunk::new();
         chunk.write_constant(1.2, 1);
         chunk.write_chunk(OP_RETURN, 2);
+        let mut adapter = PrintAdapter {};
         let mut vm = VM::new(
             VMConfig {
                 trace_execution: true,
+                stdout: &mut adapter,
             },
             &chunk,
         );
         let result = vm.interpret(&chunk);
         assert!(result.is_ok());
+    }
+    
+    #[test]
+    fn negate() {
+        let mut chunk = Chunk::new();
+        chunk.write_constant(1.2, 1);
+        chunk.write_chunk(OP_NEGATE, 2);
+        chunk.write_chunk(OP_RETURN, 3);
+        let mut output = String::new();
+        let mut adapter = StringAdapter { f: &mut output };
+        let mut vm = VM::new(
+            VMConfig {
+                trace_execution: false,
+                stdout: &mut adapter,
+            },
+            &chunk,
+        );
+        let result = vm.interpret(&chunk);
+        assert_eq!(result, Ok(()));
+        assert_eq!(output, "-1.2\n");
     }
 }

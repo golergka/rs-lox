@@ -26,6 +26,7 @@ pub fn disassemble_instruction(chunk: &Chunk, offset: usize) -> Option<(usize, S
         OP_CONSTANT => constant_instruction("OP_CONSTANT", chunk, offset)?,
         OP_CONSTANT_LONG => constant_long_instruction("OP_CONSTANT_LONG", chunk, offset)?,
         OP_RETURN => simple_instruction("OP_RETURN", offset),
+        OP_NEGATE => simple_instruction("OP_NEGATE", offset),
         _ => (offset + 1, format!("Unknown opcode {:?}", instruction)),
     };
     return Some((
@@ -128,6 +129,20 @@ mod tests {
         }
         let result = disassemble_chunk(&chunk, "test chunk");
         assert_eq!(result, target_result);
+    }
+
+    #[test]
+    fn simple_negate() {
+        let mut chunk = Chunk::new();
+        chunk.write_chunk(OP_NEGATE, 1);
+        let result = disassemble_chunk(&chunk, "test chunk");
+        assert_eq!(
+            result,
+            String::from(
+                "== test chunk ==\n\
+                0000    1 OP_NEGATE\n"
+            )
+        );
     }
 
     #[test]
