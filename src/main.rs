@@ -4,6 +4,7 @@ mod debug;
 mod rle;
 mod value;
 mod vm;
+mod scanner;
 
 use crate::vm::interpret;
 use std::env;

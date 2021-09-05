@@ -11,7 +11,7 @@ pub const OP_SUBTRACT: u8 = 5;
 pub const OP_MULTIPLY: u8 = 6;
 pub const OP_DIVIDE: u8 = 7;
 
-pub type LineNumber = u16;
+pub type LineNumber = i16;
 
 #[derive(Debug)]
 pub struct Chunk {
