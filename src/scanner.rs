@@ -84,41 +84,51 @@ impl Scanner<'_> {
     fn error_token<'a>(&self, message: &'a str) -> Token<'a> {
         Token::new(TokenKind::Error, message, self.line)
     }
+    fn peek(&self) -> Option<char> {
+        self.input.chars().nth(self.current)
+    }
+    fn peek_next(&self) -> Option<char> {
+        self.input.chars().nth(self.current + 1)
+    }
     fn advance(&mut self) -> Option<char> {
-        let c = self.input.chars().nth(self.current)?;
+        let c = self.peek()?;
         self.current += 1;
         return Some(c);
     }
     fn r#match(&mut self, expected: char) -> bool {
-        let c = self.input.chars().nth(self.current);
+        let c = self.peek();
         if c == Some(expected) {
-            self.current += 1;
+            self.advance();
             return true;
         } else {
             return false;
         }
     }
     fn skip_whitespace(&mut self) {
-        while let Some(c) = self.input.chars().nth(self.current) {
+        while let Some(c) = self.peek() {
             match c {
                 // Regular whitespace
-                ' ' | '\r' | '\t' => self.current += 1,
+                ' ' | '\r' | '\t' => {
+                    self.advance();
+                }
                 // Line break
                 '\n' => {
                     self.line += 1;
-                    self.current += 1;
+                    self.advance();
                 }
                 // Comments
                 '/' => {
                     if self.r#match('/') {
-                        while let Some(c) = self.input.chars().nth(self.current) {
+                        while let Some(c) = self.peek() {
                             match c {
                                 '\n' => {
                                     self.line += 1;
-                                    self.current += 1;
+                                    self.advance();
                                     break;
                                 }
-                                _ => self.current += 1,
+                                _ => {
+                                    self.advance();
+                                }
                             }
                         }
                     } else {
@@ -128,6 +138,49 @@ impl Scanner<'_> {
                 _ => break,
             }
         }
+    }
+    fn string(&mut self) -> Token {
+        while let Some(c) = self.peek() {
+            match c {
+                '"' => {
+                    self.current += 1;
+                    return self.make_token(TokenKind::String);
+                }
+                '\n' => {
+                    self.line += 1;
+                    self.advance();
+                }
+                _ => {
+                    self.advance();
+                }
+            }
+        }
+        self.error_token("Unterminated string.")
+    }
+    fn advance_digits(&mut self) {
+        while let Some(c) = self.peek() {
+            match c {
+                '0'..='9' => {
+                    self.advance();
+                }
+                _ => break,
+            }
+        }
+    }
+    fn number(&mut self) -> Token {
+        self.advance_digits();
+        if let Some(c) = self.peek() {
+            if c == '.' {
+                if let Some(c) = self.peek_next() {
+                    if let '0'..='9' = c {
+                        // Consume the '.'
+                        self.advance();
+                        self.advance_digits();
+                    }
+                }
+            }
+        }
+        self.make_token(TokenKind::Number)
     }
     pub fn scan(&mut self) -> Token {
         self.skip_whitespace();
@@ -177,6 +230,9 @@ impl Scanner<'_> {
                         self.make_token(TokenKind::Less)
                     }
                 }
+                // Literals
+                '"' => self.string(),
+                '0'..='9' => self.number(),
                 _ => self.error_token("Unexpected character"),
             },
         }
@@ -400,7 +456,17 @@ mod tests {
             let mut scanner = Scanner::new(&input);
             let result = scanner.scan();
             assert_eq!(result.kind, TokenKind::String);
-            assert_eq!(result.lexeme, "foobar");
+            assert_eq!(result.lexeme, "\"foobar\"");
+            assert_eq!(result.line, 1);
+        }
+
+        #[test]
+        fn unterminated_string() {
+            let input = String::from("\"This is a string");
+            let mut scanner = Scanner::new(&input);
+            let result = scanner.scan();
+            assert_eq!(result.kind, TokenKind::Error);
+            assert_eq!(result.lexeme, "Unterminated string.");
             assert_eq!(result.line, 1);
         }
 
@@ -411,6 +477,16 @@ mod tests {
             let result = scanner.scan();
             assert_eq!(result.kind, TokenKind::Number);
             assert_eq!(result.lexeme, "123");
+            assert_eq!(result.line, 1);
+        }
+        
+        #[test]
+        fn number_with_decimal() {
+            let input = String::from("123.456");
+            let mut scanner = Scanner::new(&input);
+            let result = scanner.scan();
+            assert_eq!(result.kind, TokenKind::Number);
+            assert_eq!(result.lexeme, "123.456");
             assert_eq!(result.line, 1);
         }
     }
@@ -585,7 +661,7 @@ mod tests {
             let mut scanner = Scanner::new(&input);
             let result = scanner.scan();
             assert_eq!(result.kind, TokenKind::Error);
-            assert_eq!(result.lexeme, "@");
+            assert_eq!(result.lexeme, "Unexpected character.");
             assert_eq!(result.line, 1);
         }
 
@@ -615,6 +691,7 @@ mod tests {
         assert_eq!(result.lexeme, "");
         assert_eq!(result.line, 1);
     }
+
     #[test]
     fn skips_comments() {
         let input = String::from("// This is a comment\n// This is another comment\n");
