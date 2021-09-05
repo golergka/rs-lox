@@ -2,9 +2,9 @@ mod chunk;
 mod compiler;
 mod debug;
 mod rle;
+mod scanner;
 mod value;
 mod vm;
-mod scanner;
 
 use crate::vm::interpret;
 use std::env;
