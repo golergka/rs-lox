@@ -33,8 +33,6 @@ pub enum InterpreterError {
     RuntimeError(String),
 }
 
-pub type InterpreterResult = Result<(), InterpreterError>;
-
 macro_rules! vm_print {
     ($dst:expr, $($arg:tt)*) => (
         $dst
@@ -75,7 +73,7 @@ impl<'a> VM<'a> {
         return Ok(self.stack[self.stack_top]);
     }
 
-    pub fn interpret(&mut self, chunk: &'a Chunk) -> InterpreterResult {
+    pub fn interpret(&mut self, chunk: &'a Chunk) -> Result<Value, InterpreterError> {
         self.chunk = chunk;
         self.ip = 0;
         return self.run();
@@ -117,7 +115,7 @@ impl<'a> VM<'a> {
         return Ok(self.chunk.get_constant(s as usize));
     }
 
-    fn trace_instruction(&mut self) -> InterpreterResult {
+    fn trace_instruction(&mut self) -> Result<(), InterpreterError> {
         vm_print!(self, "          ");
         for i in 0..self.stack_top {
             vm_print!(self, "[{}]", print_value(self.stack[i]));
@@ -131,7 +129,7 @@ impl<'a> VM<'a> {
         return Ok(());
     }
 
-    pub fn run(&mut self) -> InterpreterResult {
+    pub fn run(&mut self) -> Result<Value, InterpreterError> {
         loop {
             if self.config.trace_execution {
                 self.trace_instruction()?;
@@ -141,7 +139,7 @@ impl<'a> VM<'a> {
                 OP_RETURN => {
                     let value = self.stack_pop()?;
                     vm_print!(self, "{}\n", print_value(value));
-                    return Ok(());
+                    return Ok(value);
                 }
                 OP_CONSTANT => {
                     let constant = self.read_constant()?;
@@ -154,6 +152,26 @@ impl<'a> VM<'a> {
                 OP_NEGATE => {
                     let value = self.stack_pop()?;
                     self.stack_push(-value)?;
+                }
+                OP_ADD => {
+                    let b = self.stack_pop()?;
+                    let a = self.stack_pop()?;
+                    self.stack_push(a + b)?;
+                }
+                OP_SUBTRACT => {
+                    let b = self.stack_pop()?;
+                    let a = self.stack_pop()?;
+                    self.stack_push(a - b)?;
+                }
+                OP_MULTIPLY => {
+                    let b = self.stack_pop()?;
+                    let a = self.stack_pop()?;
+                    self.stack_push(a * b)?;
+                }
+                OP_DIVIDE => {
+                    let b = self.stack_pop()?;
+                    let a = self.stack_pop()?;
+                    self.stack_push(a / b)?;
                 }
                 _ => {
                     return Err(InterpreterError::RuntimeError(format!(
@@ -198,7 +216,7 @@ mod tests {
     impl io::Write for PrintAdapter {
         fn write(&mut self, b: &[u8]) -> Result<usize, io::Error> {
             let s = str::from_utf8(b).map_err(|_| io::Error::from(io::ErrorKind::Other))?;
-            println!("{}", s);
+            print!("{}", s);
             Ok(b.len())
         }
 
@@ -293,7 +311,26 @@ mod tests {
             &chunk,
         );
         let result = vm.interpret(&chunk);
-        assert!(result.is_ok());
+        assert_eq!(result, Ok(1.2));
+    }
+    
+    #[test]
+    fn return_w_many_constants() {
+        let mut chunk = Chunk::new();
+        for i in 0..256 {
+            chunk.write_constant(i as f32, i);
+        }
+        chunk.write_chunk(OP_RETURN, 256);
+        let mut adapter = PrintAdapter {};
+        let mut vm = VM::new(
+            VMConfig {
+                trace_execution: true,
+                stdout: &mut adapter,
+            },
+            &chunk,
+        );
+        let result = vm.interpret(&chunk);
+        assert_eq!(result, Ok(255.0));
     }
     
     #[test]
@@ -312,7 +349,84 @@ mod tests {
             &chunk,
         );
         let result = vm.interpret(&chunk);
-        assert_eq!(result, Ok(()));
+        assert_eq!(result, Ok(-1.2));
         assert_eq!(output, "-1.2\n");
     }
+    
+    #[test]
+    fn add() {
+        let mut chunk = Chunk::new();
+        chunk.write_constant(1.0, 1);
+        chunk.write_constant(1.0, 2);
+        chunk.write_chunk(OP_ADD, 3);
+        chunk.write_chunk(OP_RETURN, 4);
+        let mut adapter = PrintAdapter {};
+        let mut vm = VM::new(
+            VMConfig {
+                trace_execution: true,
+                stdout: &mut adapter,
+            },
+            &chunk,
+        );
+        let result = vm.interpret(&chunk);
+        assert_eq!(result, Ok(2.0));
+    }
+    
+    #[test]
+    fn subtract() {
+        let mut chunk = Chunk::new();
+        chunk.write_constant(1.2, 1);
+        chunk.write_constant(3.4, 2);
+        chunk.write_chunk(OP_SUBTRACT, 3);
+        chunk.write_chunk(OP_RETURN, 4);
+        let mut adapter = PrintAdapter {};
+        let mut vm = VM::new(
+            VMConfig {
+                trace_execution: true,
+                stdout: &mut adapter,
+            },
+            &chunk,
+        );
+        let result = vm.interpret(&chunk);
+        assert_eq!(result, Ok(-2.2));
+    }
+
+    #[test]
+    fn multiply() {
+        let mut chunk = Chunk::new();
+        chunk.write_constant(3.0, 1);
+        chunk.write_constant(-0.5, 2);
+        chunk.write_chunk(OP_MULTIPLY, 3);
+        chunk.write_chunk(OP_RETURN, 4);
+        let mut adapter = PrintAdapter {};
+        let mut vm = VM::new(
+            VMConfig {
+                trace_execution: true,
+                stdout: &mut adapter,
+            },
+            &chunk,
+        );
+        let result = vm.interpret(&chunk);
+        assert_eq!(result, Ok(-1.5));
+    }
+
+    #[test]
+    fn divide() {
+        let mut chunk = Chunk::new();
+        chunk.write_constant(10.0, 1);
+        chunk.write_constant(2.0, 2);
+        chunk.write_chunk(OP_DIVIDE, 3);
+        chunk.write_chunk(OP_RETURN, 4);
+        let mut adapter = PrintAdapter {};
+        let mut vm = VM::new(
+            VMConfig {
+                trace_execution: true,
+                stdout: &mut adapter,
+            },
+            &chunk,
+        );
+        let result = vm.interpret(&chunk);
+        assert_eq!(result, Ok(5.0));
+    }
+
 }

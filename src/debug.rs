@@ -27,6 +27,10 @@ pub fn disassemble_instruction(chunk: &Chunk, offset: usize) -> Option<(usize, S
         OP_CONSTANT_LONG => constant_long_instruction("OP_CONSTANT_LONG", chunk, offset)?,
         OP_RETURN => simple_instruction("OP_RETURN", offset),
         OP_NEGATE => simple_instruction("OP_NEGATE", offset),
+        OP_ADD => simple_instruction("OP_ADD", offset),
+        OP_SUBTRACT => simple_instruction("OP_SUBTRACT", offset),
+        OP_MULTIPLY => simple_instruction("OP_MULTIPLY", offset),
+        OP_DIVIDE => simple_instruction("OP_DIVIDE", offset),
         _ => (offset + 1, format!("Unknown opcode {:?}", instruction)),
     };
     return Some((
@@ -75,7 +79,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn simple_return() {
+    fn retrn() {
         let mut chunk = Chunk::new();
         chunk.write_chunk(OP_RETURN, 1);
         let result = disassemble_chunk(&chunk, "test chunk");
@@ -89,7 +93,7 @@ mod tests {
     }
 
     #[test]
-    fn simple_constant() {
+    fn constant() {
         let mut chunk = Chunk::new();
         chunk.write_constant(1.2, 1);
         let result = disassemble_chunk(&chunk, "test chunk");
@@ -132,7 +136,7 @@ mod tests {
     }
 
     #[test]
-    fn simple_negate() {
+    fn negate() {
         let mut chunk = Chunk::new();
         chunk.write_chunk(OP_NEGATE, 1);
         let result = disassemble_chunk(&chunk, "test chunk");
@@ -141,6 +145,60 @@ mod tests {
             String::from(
                 "== test chunk ==\n\
                 0000    1 OP_NEGATE\n"
+            )
+        );
+    }
+    #[test]
+    fn add() {
+        let mut chunk = Chunk::new();
+        chunk.write_chunk(OP_ADD, 1);
+        let result = disassemble_chunk(&chunk, "test chunk");
+        assert_eq!(
+            result,
+            String::from(
+                "== test chunk ==\n\
+                0000    1 OP_ADD\n"
+            )
+        );
+    }
+    #[test]
+    fn subtract() {
+        let mut chunk = Chunk::new();
+        chunk.write_chunk(OP_SUBTRACT, 1);
+        let result = disassemble_chunk(&chunk, "test chunk");
+        assert_eq!(
+            result,
+            String::from(
+                "== test chunk ==\n\
+                0000    1 OP_SUBTRACT\n"
+            )
+        );
+    }
+
+    #[test]
+    fn multiply() {
+        let mut chunk = Chunk::new();
+        chunk.write_chunk(OP_MULTIPLY, 1);
+        let result = disassemble_chunk(&chunk, "test chunk");
+        assert_eq!(
+            result,
+            String::from(
+                "== test chunk ==\n\
+                0000    1 OP_MULTIPLY\n"
+            )
+        );
+    }
+
+    #[test]
+    fn divide() {
+        let mut chunk = Chunk::new();
+        chunk.write_chunk(OP_DIVIDE, 1);
+        let result = disassemble_chunk(&chunk, "test chunk");
+        assert_eq!(
+            result,
+            String::from(
+                "== test chunk ==\n\
+                0000    1 OP_DIVIDE\n"
             )
         );
     }
