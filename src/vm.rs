@@ -429,4 +429,25 @@ mod tests {
         assert_eq!(result, Ok(5.0));
     }
 
+    #[test]
+    fn simple_operations() {
+        let mut chunk = Chunk::new();
+        chunk.write_constant(1.2, 1);
+        chunk.write_constant(3.4, 1);
+        chunk.write_chunk(OP_ADD, 1);
+        chunk.write_constant(5.6, 1);
+        chunk.write_chunk(OP_DIVIDE, 1);
+        chunk.write_chunk(OP_NEGATE, 1);
+        chunk.write_chunk(OP_RETURN, 1);
+        let mut adapter = PrintAdapter {};
+        let mut vm = VM::new(
+            VMConfig {
+                trace_execution: true,
+                stdout: &mut adapter,
+            },
+            &chunk,
+        );
+        let result = vm.interpret(&chunk);
+        assert_eq!(result, Ok(-0.82142866));
+    }
 }
