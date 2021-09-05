@@ -2,6 +2,7 @@ mod chunk;
 mod debug;
 mod rle;
 mod value;
+mod vm;
 
 use chunk::*;
 use debug::*;

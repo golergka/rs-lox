@@ -7,8 +7,8 @@ pub fn disassemble_chunk(chunk: &Chunk, name: &str) -> String {
     result.push_str(&format!("== {} ==\n", name));
     let mut offset = 0;
     while offset < chunk.get_code().len() {
-        let next_offset = disassemble_instruction(chunk, offset);
-        match next_offset {
+        let instr_result = disassemble_instruction(chunk, offset);
+        match instr_result {
             None => break,
             Some((next_offset, description)) => {
                 result.push_str(&description);
@@ -20,7 +20,7 @@ pub fn disassemble_chunk(chunk: &Chunk, name: &str) -> String {
     return result;
 }
 
-fn disassemble_instruction(chunk: &Chunk, offset: usize) -> Option<(usize, String)> {
+pub fn disassemble_instruction(chunk: &Chunk, offset: usize) -> Option<(usize, String)> {
     let instruction = chunk.get_code()[offset];
     let (new_offset, instr_description): (usize, String) = match instruction {
         OP_CONSTANT => constant_instruction("OP_CONSTANT", chunk, offset)?,
