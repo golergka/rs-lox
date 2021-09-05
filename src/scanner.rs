@@ -98,7 +98,20 @@ impl Scanner<'_> {
             return false;
         }
     }
+    fn skip_whitespace(&mut self) {
+        while let Some(c) = self.input.chars().nth(self.current) {
+            match c {
+                ' ' | '\r' | '\t' => self.current += 1,
+                '\n' => {
+                    self.line += 1;
+                    self.current += 1;
+                }
+                _ => break,
+            }
+        }
+    }
     pub fn scan(&mut self) -> Token {
+        self.skip_whitespace();
         self.start = self.current;
         let next = self.advance();
         match next {
@@ -564,6 +577,24 @@ mod tests {
             let result = scanner.scan();
             assert_eq!(result.kind, TokenKind::Eof);
         }
+    }
+
+    #[test]
+    fn skips_whitespace() {
+        let input = String::from(" ( ) ");
+        let mut scanner = Scanner::new(&input);
+        let result = scanner.scan();
+        assert_eq!(result.kind, TokenKind::LeftParen);
+        assert_eq!(result.lexeme, "(");
+        assert_eq!(result.line, 1);
+        let result = scanner.scan();
+        assert_eq!(result.kind, TokenKind::RightParen);
+        assert_eq!(result.lexeme, ")");
+        assert_eq!(result.line, 1);
+        let result = scanner.scan();
+        assert_eq!(result.kind, TokenKind::Eof);
+        assert_eq!(result.lexeme, "");
+        assert_eq!(result.line, 1);
     }
 
     #[test]
