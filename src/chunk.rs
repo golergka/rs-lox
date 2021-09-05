@@ -38,10 +38,15 @@ impl Chunk {
         self.lines.push(line);
     }
 
-    pub fn read_short(&self, index: usize) -> u16 {
-        let a = self.code[index];
-        let b = self.code[index + 1];
-        u16::from_be_bytes([a, b])
+    pub fn read_byte(&self, index: usize) -> Option<u8> {
+        let a = self.code.get(index)?;
+        return Some(*a);
+    }
+
+    pub fn read_short(&self, index: usize) -> Option<u16> {
+        let a = self.code.get(index)?;
+        let b = self.code.get(index + 1)?;
+        return Some(u16::from_be_bytes([*a, *b]));
     }
 
     pub fn get_code(&self) -> &[u8] {

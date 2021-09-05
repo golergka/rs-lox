@@ -21,7 +21,7 @@ pub fn disassemble_chunk(chunk: &Chunk, name: &str) -> String {
 }
 
 pub fn disassemble_instruction(chunk: &Chunk, offset: usize) -> Option<(usize, String)> {
-    let instruction = chunk.get_code()[offset];
+    let instruction = chunk.read_byte(offset)?;
     let (new_offset, instr_description): (usize, String) = match instruction {
         OP_CONSTANT => constant_instruction("OP_CONSTANT", chunk, offset)?,
         OP_CONSTANT_LONG => constant_long_instruction("OP_CONSTANT_LONG", chunk, offset)?,
@@ -61,7 +61,7 @@ fn constant_instruction(name: &str, chunk: &Chunk, offset: usize) -> Option<(usi
 }
 
 fn constant_long_instruction(name: &str, chunk: &Chunk, offset: usize) -> Option<(usize, String)> {
-    let constant = chunk.read_short(offset + 1);
+    let constant = chunk.read_short(offset + 1)?;
     let index: usize = constant.try_into().ok()?;
     let value: f32 = chunk.get_constant(index);
     let description = format!("{} {} '{}'", name, constant, print_value(value));
