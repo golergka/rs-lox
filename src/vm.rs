@@ -1,8 +1,14 @@
 use crate::chunk::*;
+use crate::compiler::compile;
 use crate::debug::*;
 use crate::value::*;
 use std::fmt;
 use std::io;
+
+pub fn interpret(source: String) -> Result<Value, InterpreterError> {
+    compile(source);
+    return Ok(0.0);
+}
 
 pub struct VMConfig<'a> {
     pub trace_execution: bool,
@@ -18,6 +24,21 @@ impl std::fmt::Debug for VMConfig<'_> {
     }
 }
 
+#[derive(Debug, PartialEq, Eq)]
+pub enum InterpreterError {
+    RuntimeError(String),
+}
+
+impl fmt::Display for InterpreterError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::result::Result<(), std::fmt::Error> {
+        return match self {
+            InterpreterError::RuntimeError(s) => write!(f, "Runtime error: {}", s),
+        };
+    }
+}
+
+impl std::error::Error for InterpreterError {}
+
 pub const STACK_MAX: usize = 256;
 
 pub struct VM<'a> {
@@ -26,11 +47,6 @@ pub struct VM<'a> {
     config: VMConfig<'a>,
     stack: [Value; STACK_MAX],
     stack_top: usize,
-}
-
-#[derive(Debug, PartialEq, Eq)]
-pub enum InterpreterError {
-    RuntimeError(String),
 }
 
 macro_rules! vm_print {
@@ -313,7 +329,6 @@ mod tests {
         let result = vm.interpret(&chunk);
         assert_eq!(result, Ok(1.2));
     }
-    
     #[test]
     fn return_w_many_constants() {
         let mut chunk = Chunk::new();
@@ -332,7 +347,6 @@ mod tests {
         let result = vm.interpret(&chunk);
         assert_eq!(result, Ok(255.0));
     }
-    
     #[test]
     fn negate() {
         let mut chunk = Chunk::new();
@@ -352,7 +366,6 @@ mod tests {
         assert_eq!(result, Ok(-1.2));
         assert_eq!(output, "-1.2\n");
     }
-    
     #[test]
     fn add() {
         let mut chunk = Chunk::new();
@@ -371,7 +384,6 @@ mod tests {
         let result = vm.interpret(&chunk);
         assert_eq!(result, Ok(2.0));
     }
-    
     #[test]
     fn subtract() {
         let mut chunk = Chunk::new();
