@@ -1,14 +1,9 @@
 use crate::chunk::*;
-use crate::compiler::compile;
 use crate::debug::*;
 use crate::value::*;
+use num_traits::FromPrimitive;
 use std::fmt;
 use std::io;
-
-pub fn interpret(source: String) -> Result<Value, InterpreterError> {
-    compile(source);
-    return Ok(0.0);
-}
 
 pub struct VMConfig<'a> {
     pub trace_execution: bool,
@@ -26,6 +21,7 @@ impl std::fmt::Debug for VMConfig<'_> {
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum InterpreterError {
+    CompileError(),
     RuntimeError(String),
 }
 
@@ -33,6 +29,7 @@ impl fmt::Display for InterpreterError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::result::Result<(), std::fmt::Error> {
         return match self {
             InterpreterError::RuntimeError(s) => write!(f, "Runtime error: {}", s),
+            InterpreterError::CompileError() => write!(f, "Compile error"),
         };
     }
 }
@@ -88,8 +85,7 @@ impl<'a> VM<'a> {
         self.stack_top -= 1;
         return Ok(self.stack[self.stack_top]);
     }
-
-    pub fn interpret(&mut self, chunk: &'a Chunk) -> Result<Value, InterpreterError> {
+    pub fn interpret_chunk(&mut self, chunk: &'a Chunk) -> Result<Value, InterpreterError> {
         self.chunk = chunk;
         self.ip = 0;
         return self.run();
@@ -150,50 +146,47 @@ impl<'a> VM<'a> {
             if self.config.trace_execution {
                 self.trace_instruction()?;
             }
-            let instruction = self.read_byte()?;
+            let byte = self.read_byte()?;
+            let instruction = FromPrimitive::from_u8(byte).ok_or(
+                InterpreterError::RuntimeError(format!("Unknown opcode: {}", byte)),
+            )?;
             match instruction {
-                OP_RETURN => {
+                OpCode::Return => {
                     let value = self.stack_pop()?;
                     vm_print!(self, "{}\n", print_value(value));
                     return Ok(value);
                 }
-                OP_CONSTANT => {
+                OpCode::Constant => {
                     let constant = self.read_constant()?;
                     self.stack_push(constant)?;
                 }
-                OP_CONSTANT_LONG => {
+                OpCode::ConstantLong => {
                     let constant = self.read_constant_long()?;
                     self.stack_push(constant)?;
                 }
-                OP_NEGATE => {
+                OpCode::Negate => {
                     let value = self.stack_pop()?;
                     self.stack_push(-value)?;
                 }
-                OP_ADD => {
+                OpCode::Add => {
                     let b = self.stack_pop()?;
                     let a = self.stack_pop()?;
                     self.stack_push(a + b)?;
                 }
-                OP_SUBTRACT => {
+                OpCode::Subtract => {
                     let b = self.stack_pop()?;
                     let a = self.stack_pop()?;
                     self.stack_push(a - b)?;
                 }
-                OP_MULTIPLY => {
+                OpCode::Multiply => {
                     let b = self.stack_pop()?;
                     let a = self.stack_pop()?;
                     self.stack_push(a * b)?;
                 }
-                OP_DIVIDE => {
+                OpCode::Divide => {
                     let b = self.stack_pop()?;
                     let a = self.stack_pop()?;
                     self.stack_push(a / b)?;
-                }
-                _ => {
-                    return Err(InterpreterError::RuntimeError(format!(
-                        "Unknown opcode: {}",
-                        instruction
-                    )))
                 }
             }
             self.config.stdout.flush().map_err(|_| {
@@ -244,7 +237,7 @@ mod tests {
     #[test]
     fn return_wo_constant() {
         let mut chunk = Chunk::new();
-        chunk.write_chunk(OP_RETURN, 1);
+        chunk.write_opcode(OpCode::Return, 1);
         let mut output = String::new();
         let mut adapter = StringAdapter { f: &mut output };
         let mut vm = VM::new(
@@ -254,7 +247,7 @@ mod tests {
             },
             &chunk,
         );
-        let result = vm.interpret(&chunk);
+        let result = vm.interpret_chunk(&chunk);
         assert_eq!(
             result,
             Err(InterpreterError::RuntimeError(String::from(
@@ -281,7 +274,7 @@ mod tests {
             },
             &chunk,
         );
-        let result = vm.interpret(&chunk);
+        let result = vm.interpret_chunk(&chunk);
         assert_eq!(
             result,
             Err(InterpreterError::RuntimeError(String::from(
@@ -304,7 +297,7 @@ mod tests {
             },
             &chunk,
         );
-        let result = vm.interpret(&chunk);
+        let result = vm.interpret_chunk(&chunk);
         assert_eq!(
             result,
             Err(InterpreterError::RuntimeError(String::from(
@@ -317,7 +310,7 @@ mod tests {
     fn return_w_constant() {
         let mut chunk = Chunk::new();
         chunk.write_constant(1.2, 1);
-        chunk.write_chunk(OP_RETURN, 2);
+        chunk.write_opcode(OpCode::Return, 2);
         let mut adapter = PrintAdapter {};
         let mut vm = VM::new(
             VMConfig {
@@ -326,7 +319,7 @@ mod tests {
             },
             &chunk,
         );
-        let result = vm.interpret(&chunk);
+        let result = vm.interpret_chunk(&chunk);
         assert_eq!(result, Ok(1.2));
     }
     #[test]
@@ -335,7 +328,7 @@ mod tests {
         for i in 0..256 {
             chunk.write_constant(i as f32, i);
         }
-        chunk.write_chunk(OP_RETURN, 256);
+        chunk.write_opcode(OpCode::Return, 256);
         let mut adapter = PrintAdapter {};
         let mut vm = VM::new(
             VMConfig {
@@ -344,15 +337,15 @@ mod tests {
             },
             &chunk,
         );
-        let result = vm.interpret(&chunk);
+        let result = vm.interpret_chunk(&chunk);
         assert_eq!(result, Ok(255.0));
     }
     #[test]
     fn negate() {
         let mut chunk = Chunk::new();
         chunk.write_constant(1.2, 1);
-        chunk.write_chunk(OP_NEGATE, 2);
-        chunk.write_chunk(OP_RETURN, 3);
+        chunk.write_opcode(OpCode::Negate, 2);
+        chunk.write_opcode(OpCode::Return, 3);
         let mut output = String::new();
         let mut adapter = StringAdapter { f: &mut output };
         let mut vm = VM::new(
@@ -362,7 +355,7 @@ mod tests {
             },
             &chunk,
         );
-        let result = vm.interpret(&chunk);
+        let result = vm.interpret_chunk(&chunk);
         assert_eq!(result, Ok(-1.2));
         assert_eq!(output, "-1.2\n");
     }
@@ -371,8 +364,8 @@ mod tests {
         let mut chunk = Chunk::new();
         chunk.write_constant(1.0, 1);
         chunk.write_constant(1.0, 2);
-        chunk.write_chunk(OP_ADD, 3);
-        chunk.write_chunk(OP_RETURN, 4);
+        chunk.write_opcode(OpCode::Add, 3);
+        chunk.write_opcode(OpCode::Return, 4);
         let mut adapter = PrintAdapter {};
         let mut vm = VM::new(
             VMConfig {
@@ -381,7 +374,7 @@ mod tests {
             },
             &chunk,
         );
-        let result = vm.interpret(&chunk);
+        let result = vm.interpret_chunk(&chunk);
         assert_eq!(result, Ok(2.0));
     }
     #[test]
@@ -389,8 +382,8 @@ mod tests {
         let mut chunk = Chunk::new();
         chunk.write_constant(1.2, 1);
         chunk.write_constant(3.4, 2);
-        chunk.write_chunk(OP_SUBTRACT, 3);
-        chunk.write_chunk(OP_RETURN, 4);
+        chunk.write_opcode(OpCode::Subtract, 3);
+        chunk.write_opcode(OpCode::Return, 4);
         let mut adapter = PrintAdapter {};
         let mut vm = VM::new(
             VMConfig {
@@ -399,7 +392,7 @@ mod tests {
             },
             &chunk,
         );
-        let result = vm.interpret(&chunk);
+        let result = vm.interpret_chunk(&chunk);
         assert_eq!(result, Ok(-2.2));
     }
 
@@ -408,8 +401,8 @@ mod tests {
         let mut chunk = Chunk::new();
         chunk.write_constant(3.0, 1);
         chunk.write_constant(-0.5, 2);
-        chunk.write_chunk(OP_MULTIPLY, 3);
-        chunk.write_chunk(OP_RETURN, 4);
+        chunk.write_opcode(OpCode::Multiply, 3);
+        chunk.write_opcode(OpCode::Return, 4);
         let mut adapter = PrintAdapter {};
         let mut vm = VM::new(
             VMConfig {
@@ -418,7 +411,7 @@ mod tests {
             },
             &chunk,
         );
-        let result = vm.interpret(&chunk);
+        let result = vm.interpret_chunk(&chunk);
         assert_eq!(result, Ok(-1.5));
     }
 
@@ -427,8 +420,8 @@ mod tests {
         let mut chunk = Chunk::new();
         chunk.write_constant(10.0, 1);
         chunk.write_constant(2.0, 2);
-        chunk.write_chunk(OP_DIVIDE, 3);
-        chunk.write_chunk(OP_RETURN, 4);
+        chunk.write_opcode(OpCode::Divide, 3);
+        chunk.write_opcode(OpCode::Return, 4);
         let mut adapter = PrintAdapter {};
         let mut vm = VM::new(
             VMConfig {
@@ -437,7 +430,7 @@ mod tests {
             },
             &chunk,
         );
-        let result = vm.interpret(&chunk);
+        let result = vm.interpret_chunk(&chunk);
         assert_eq!(result, Ok(5.0));
     }
 
@@ -446,11 +439,11 @@ mod tests {
         let mut chunk = Chunk::new();
         chunk.write_constant(1.2, 1);
         chunk.write_constant(3.4, 1);
-        chunk.write_chunk(OP_ADD, 1);
+        chunk.write_opcode(OpCode::Add, 1);
         chunk.write_constant(5.6, 1);
-        chunk.write_chunk(OP_DIVIDE, 1);
-        chunk.write_chunk(OP_NEGATE, 1);
-        chunk.write_chunk(OP_RETURN, 1);
+        chunk.write_opcode(OpCode::Divide, 1);
+        chunk.write_opcode(OpCode::Negate, 1);
+        chunk.write_opcode(OpCode::Return, 1);
         let mut adapter = PrintAdapter {};
         let mut vm = VM::new(
             VMConfig {
@@ -459,7 +452,7 @@ mod tests {
             },
             &chunk,
         );
-        let result = vm.interpret(&chunk);
+        let result = vm.interpret_chunk(&chunk);
         assert_eq!(result, Ok(-0.82142866));
     }
 }

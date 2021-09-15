@@ -1,5 +1,6 @@
 use crate::chunk::*;
 use crate::value::*;
+use num_traits::FromPrimitive;
 use std::convert::TryInto;
 
 pub fn disassemble_chunk(chunk: &Chunk, name: &str) -> String {
@@ -21,17 +22,23 @@ pub fn disassemble_chunk(chunk: &Chunk, name: &str) -> String {
 }
 
 pub fn disassemble_instruction(chunk: &Chunk, offset: usize) -> Option<(usize, String)> {
-    let instruction = chunk.read_byte(offset)?;
+    let byte = chunk.read_byte(offset)?;
+    let instruction: Option<OpCode> = FromPrimitive::from_u8(byte);
     let (new_offset, instr_description): (usize, String) = match instruction {
-        OP_CONSTANT => constant_instruction("OP_CONSTANT", chunk, offset)?,
-        OP_CONSTANT_LONG => constant_long_instruction("OP_CONSTANT_LONG", chunk, offset)?,
-        OP_RETURN => simple_instruction("OP_RETURN", offset),
-        OP_NEGATE => simple_instruction("OP_NEGATE", offset),
-        OP_ADD => simple_instruction("OP_ADD", offset),
-        OP_SUBTRACT => simple_instruction("OP_SUBTRACT", offset),
-        OP_MULTIPLY => simple_instruction("OP_MULTIPLY", offset),
-        OP_DIVIDE => simple_instruction("OP_DIVIDE", offset),
-        _ => (offset + 1, format!("Unknown opcode {:?}", instruction)),
+        Some(OpCode::Constant) => constant_instruction("OP_CONSTANT", chunk, offset)?,
+        Some(OpCode::ConstantLong) => constant_long_instruction("OP_CONSTANT_LONG", chunk, offset)?,
+        Some(OpCode::Return) => simple_instruction("OP_RETURN", offset),
+        Some(OpCode::Negate) => simple_instruction("OP_NEGATE", offset),
+        Some(OpCode::Add) => simple_instruction("OP_ADD", offset),
+        Some(OpCode::Subtract) => simple_instruction("OP_SUBTRACT", offset),
+        Some(OpCode::Multiply) => simple_instruction("OP_MULTIPLY", offset),
+        Some(OpCode::Divide) => simple_instruction("OP_DIVIDE", offset),
+        None => {
+            return Some((
+                offset + 1,
+                format!("[{}] Unknown opcode {:02x}", offset, byte),
+            ))
+        }
     };
     return Some((
         new_offset,
@@ -81,7 +88,7 @@ mod tests {
     #[test]
     fn retrn() {
         let mut chunk = Chunk::new();
-        chunk.write_chunk(OP_RETURN, 1);
+        chunk.write_opcode(OpCode::Return, 1);
         let result = disassemble_chunk(&chunk, "test chunk");
         assert_eq!(
             result,
@@ -138,7 +145,7 @@ mod tests {
     #[test]
     fn negate() {
         let mut chunk = Chunk::new();
-        chunk.write_chunk(OP_NEGATE, 1);
+        chunk.write_opcode(OpCode::Negate, 1);
         let result = disassemble_chunk(&chunk, "test chunk");
         assert_eq!(
             result,
@@ -151,7 +158,7 @@ mod tests {
     #[test]
     fn add() {
         let mut chunk = Chunk::new();
-        chunk.write_chunk(OP_ADD, 1);
+        chunk.write_opcode(OpCode::Add, 1);
         let result = disassemble_chunk(&chunk, "test chunk");
         assert_eq!(
             result,
@@ -164,7 +171,7 @@ mod tests {
     #[test]
     fn subtract() {
         let mut chunk = Chunk::new();
-        chunk.write_chunk(OP_SUBTRACT, 1);
+        chunk.write_opcode(OpCode::Subtract, 1);
         let result = disassemble_chunk(&chunk, "test chunk");
         assert_eq!(
             result,
@@ -178,7 +185,7 @@ mod tests {
     #[test]
     fn multiply() {
         let mut chunk = Chunk::new();
-        chunk.write_chunk(OP_MULTIPLY, 1);
+        chunk.write_opcode(OpCode::Multiply, 1);
         let result = disassemble_chunk(&chunk, "test chunk");
         assert_eq!(
             result,
@@ -192,7 +199,7 @@ mod tests {
     #[test]
     fn divide() {
         let mut chunk = Chunk::new();
-        chunk.write_chunk(OP_DIVIDE, 1);
+        chunk.write_opcode(OpCode::Divide, 1);
         let result = disassemble_chunk(&chunk, "test chunk");
         assert_eq!(
             result,
@@ -207,7 +214,7 @@ mod tests {
     fn line_numbers() {
         let mut chunk = Chunk::new();
         chunk.write_constant(1.2, 123);
-        chunk.write_chunk(OP_RETURN, 123);
+        chunk.write_opcode(OpCode::Return, 123);
         let result = disassemble_chunk(&chunk, "test chunk");
         assert_eq!(
             result,

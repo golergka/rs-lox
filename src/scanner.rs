@@ -49,6 +49,7 @@ pub enum TokenKind {
     Eof,
 }
 
+#[derive(Debug, Clone, Copy)]
 pub struct Token<'a> {
     pub kind: TokenKind,
     pub lexeme: &'a str,
@@ -76,7 +77,7 @@ fn is_alpha(c: char) -> bool {
     (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || c == '_'
 }
 
-impl Scanner<'_> {
+impl<'a> Scanner<'a> {
     pub fn new(input: &String) -> Scanner {
         Scanner {
             input,
@@ -85,11 +86,11 @@ impl Scanner<'_> {
             line: 1,
         }
     }
-    fn make_token(&self, kind: TokenKind) -> Token {
+    fn make_token(&self, kind: TokenKind) -> Token<'a> {
         let lexeme = &self.input[self.start..self.current];
         Token::new(kind, lexeme, self.line)
     }
-    fn error_token<'a>(&self, message: &'a str) -> Token<'a> {
+    fn error_token(&self, message: &'a str) -> Token<'a> {
         Token::new(TokenKind::Error, message, self.line)
     }
     fn peek(&self) -> Option<char> {
@@ -156,7 +157,7 @@ impl Scanner<'_> {
             }
         }
     }
-    fn string(&mut self) -> Token {
+    fn string(&mut self) -> Token<'a> {
         while let Some(c) = self.peek() {
             match c {
                 '"' => {
@@ -174,7 +175,7 @@ impl Scanner<'_> {
         }
         self.error_token("Unterminated string.")
     }
-    fn number(&mut self) -> Token {
+    fn number(&mut self) -> Token<'a> {
         self.match_while(is_digit);
         if let Some(c) = self.peek() {
             if c == '.' {
@@ -232,11 +233,11 @@ impl Scanner<'_> {
         };
         return TokenKind::Identifier;
     }
-    fn identifier(&mut self) -> Token {
+    fn identifier(&mut self) -> Token<'a> {
         self.match_while(|c| is_alpha(c) || is_digit(c));
         self.make_token(self.identifier_type())
     }
-    pub fn scan(&mut self) -> Token {
+    pub fn scan(&mut self) -> Token<'a> {
         self.skip_whitespace();
         self.start = self.current;
         let next = self.advance();

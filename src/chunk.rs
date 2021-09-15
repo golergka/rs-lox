@@ -1,15 +1,19 @@
 use crate::rle::*;
 use crate::value::*;
 use std::convert::TryFrom;
+use num_derive::FromPrimitive;
 
-pub const OP_RETURN: u8 = 0;
-pub const OP_CONSTANT: u8 = 1;
-pub const OP_CONSTANT_LONG: u8 = 2;
-pub const OP_NEGATE: u8 = 3;
-pub const OP_ADD: u8 = 4;
-pub const OP_SUBTRACT: u8 = 5;
-pub const OP_MULTIPLY: u8 = 6;
-pub const OP_DIVIDE: u8 = 7;
+#[derive(Debug, Clone, PartialEq, FromPrimitive)]
+pub enum OpCode {
+    Return,
+    Constant,
+    ConstantLong,
+    Negate,
+    Add,
+    Subtract,
+    Multiply,
+    Divide,
+}
 
 pub type LineNumber = i16;
 
@@ -28,10 +32,12 @@ impl Chunk {
             lines: Rle::new(),
         }
     }
-
     pub fn write_chunk(&mut self, op: u8, line: LineNumber) {
         self.code.push(op);
         self.lines.push(line);
+    }
+    pub fn write_opcode(&mut self, op: OpCode, line: LineNumber) {
+        self.write_chunk(op as u8, line);
     }
 
     pub fn write_short(&mut self, value: u16, line: LineNumber) {
@@ -70,10 +76,10 @@ impl Chunk {
     pub fn write_constant(&mut self, value: Value, line: LineNumber) {
         let constant = self.add_constant(value);
         if let Ok(op) = u8::try_from(constant) {
-            self.write_chunk(OP_CONSTANT, line);
+            self.write_opcode(OpCode::Constant, line);
             self.write_chunk(op, line);
         } else if let Ok(op) = u16::try_from(constant) {
-            self.write_chunk(OP_CONSTANT_LONG, line);
+            self.write_opcode(OpCode::ConstantLong, line);
             self.write_short(op, line);
         } else {
             panic!("Can't support more than 65 536 constants");
@@ -93,8 +99,8 @@ mod tests {
     #[test]
     fn returns_correct_line() {
         let mut chunk = Chunk::new();
-        chunk.write_chunk(OP_CONSTANT, 1);
-        chunk.write_chunk(OP_RETURN, 2);
+        chunk.write_opcode(OpCode::Constant, 1);
+        chunk.write_opcode(OpCode::Return, 2);
         assert_eq!(chunk.get_line(0), Some(&1));
         assert_eq!(chunk.get_line(1), Some(&2));
     }
@@ -102,17 +108,20 @@ mod tests {
     #[test]
     fn returns_none_for_out_of_bounds_line() {
         let mut chunk = Chunk::new();
-        chunk.write_chunk(OP_CONSTANT, 1);
-        chunk.write_chunk(OP_RETURN, 2);
+        chunk.write_opcode(OpCode::Constant, 1);
+        chunk.write_opcode(OpCode::Return, 2);
         assert_eq!(chunk.get_line(2), None);
     }
 
     #[test]
     fn returns_correct_code() {
         let mut chunk = Chunk::new();
-        chunk.write_chunk(OP_CONSTANT, 1);
-        chunk.write_chunk(OP_RETURN, 2);
-        assert_eq!(chunk.get_code(), &[OP_CONSTANT, OP_RETURN]);
+        chunk.write_opcode(OpCode::Constant, 1);
+        chunk.write_opcode(OpCode::Return, 2);
+        assert_eq!(
+            chunk.get_code(),
+            &[OpCode::Constant as u8, OpCode::Return as u8]
+        );
     }
 
     #[test]
@@ -126,7 +135,7 @@ mod tests {
     fn writes_constant() {
         let mut chunk = Chunk::new();
         chunk.write_constant(1.2, 1);
-        assert_eq!(chunk.get_code(), &[OP_CONSTANT, 0]);
+        assert_eq!(chunk.get_code(), &[OpCode::Constant as u8, 0]);
         assert_eq!(chunk.get_constant(0), 1.2);
     }
 
