@@ -234,7 +234,7 @@ fn get_rule(token: TokenKind) -> ParseRule {
 }
 
 pub struct ParserError<'a> {
-    pub message: String,
+    pub message: &'a str,
     pub token: Token<'a>,
 }
 
@@ -260,21 +260,21 @@ impl<'a> Compiler<'a> {
         }
     }
     // Error handling
-    fn error_at(&mut self, token: Token<'a>, message: String) {
+    fn error_at(&mut self, token: Token<'a>, message: &'a str) {
         if self.panic_mode {
             return;
         }
         self.panic_mode = true;
         self.errors.push(ParserError { token, message })
     }
-    fn error_at_current(&mut self, message: String) {
+    fn error_at_current(&mut self, message: &'a str) {
         self.error_at(self.current, message)
     }
-    fn error(&mut self, message: String) {
+    fn error(&mut self, message: &'a str) {
         self.error_at(self.previous, message)
     }
     // Parsing
-    fn consume(&mut self, kind: TokenKind, message: String) {
+    fn consume(&mut self, kind: TokenKind, message: &'a str) {
         if self.current.kind == kind {
             self.advance()
         } else {
@@ -289,7 +289,7 @@ impl<'a> Compiler<'a> {
             if self.current.kind != TokenKind::Error {
                 break;
             }
-            self.error_at_current(self.current.lexeme.to_string())
+            self.error_at_current(self.current.lexeme)
         }
     }
     fn parse_precedence(&mut self, precedence: Precedence) {
@@ -297,7 +297,7 @@ impl<'a> Compiler<'a> {
         let prefix_rule = get_rule(self.previous.kind).prefix;
         match prefix_rule {
             None => {
-                self.error_at_current("Expected expression.".to_string());
+                self.error_at_current("Expected expression.");
             }
             Some(rule) => {
                 rule(self);
@@ -370,14 +370,14 @@ fn binary<'a>(compiler: &mut Compiler<'a>) {
 
 fn grouping<'a>(compiler: &mut Compiler<'a>) {
     compiler.expression();
-    compiler.consume(TokenKind::RightParen, "Expect ')' after expression.".to_string());
+    compiler.consume(TokenKind::RightParen, "Expect ')' after expression.");
 }
 
 pub fn compile(source: String) -> Result<Chunk, InterpreterError> {
     let scanner = Scanner::new(&source);
     let mut compiler = Compiler::new(scanner);
     compiler.expression();
-    compiler.consume(TokenKind::Eof, "Expect end of expression.".to_string());
+    compiler.consume(TokenKind::Eof, "Expect end of expression.");
     match compiler.errors.len() {
         0 => Ok(compiler.end()),
         // TODO combine Ver<ParserError> into a CompilerError
