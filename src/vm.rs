@@ -175,17 +175,6 @@ impl<'a> VM<'a> {
                 OpCode::False => {
                     self.stack_push(Value::Boolean(false))?;
                 }
-                OpCode::Negate => {
-                    let value = self.stack_pop()?;
-                    if let Number(n) = value {
-                        self.stack_push(Number(-n))?;
-                    } else {
-                        return Err(InterpreterError::RuntimeError(format!(
-                            "Invalid type for negation: {}",
-                            print_value(value)
-                        )));
-                    }
-                }
                 OpCode::Add => {
                     let b = self.stack_pop()?;
                     let a = self.stack_pop()?;
@@ -235,6 +224,28 @@ impl<'a> VM<'a> {
                             "Invalid type for division: {} {}",
                             print_value(a),
                             print_value(b)
+                        )));
+                    }
+                }
+                OpCode::Negate => {
+                    let value = self.stack_pop()?;
+                    if let Number(n) = value {
+                        self.stack_push(Number(-n))?;
+                    } else {
+                        return Err(InterpreterError::RuntimeError(format!(
+                            "Invalid type for negation: {}",
+                            print_value(value)
+                        )));
+                    }
+                }
+                OpCode::Not => {
+                    let value = self.stack_pop()?;
+                    if let Boolean(b) = value {
+                        self.stack_push(Boolean(!b))?;
+                    } else {
+                        return Err(InterpreterError::RuntimeError(format!(
+                            "Invalid type for not: {}",
+                            print_value(value)
                         )));
                     }
                 }
@@ -427,50 +438,6 @@ mod tests {
     }
 
     #[test]
-    fn negate() {
-        let mut chunk = Chunk::new();
-        chunk.write_constant(Number(1.2), 1);
-        chunk.write_opcode(OpCode::Negate, 2);
-        chunk.write_opcode(OpCode::Return, 3);
-        let mut output = String::new();
-        let mut adapter = StringAdapter { f: &mut output };
-        let mut vm = VM::new(
-            VMConfig {
-                trace_execution: false,
-                stdout: &mut adapter,
-            },
-            &chunk,
-        );
-        let result = vm.interpret_chunk(&chunk);
-        assert_eq!(result, Ok(Number(-1.2)));
-        assert_eq!(output, "-1.2\n");
-    }
-
-    #[test]
-    fn negate_nil() {
-        let mut chunk = Chunk::new();
-        chunk.write_constant(Nil, 1);
-        chunk.write_opcode(OpCode::Negate, 2);
-        chunk.write_opcode(OpCode::Return, 3);
-        let mut output = String::new();
-        let mut adapter = StringAdapter { f: &mut output };
-        let mut vm = VM::new(
-            VMConfig {
-                trace_execution: false,
-                stdout: &mut adapter,
-            },
-            &chunk,
-        );
-        let result = vm.interpret_chunk(&chunk);
-        assert_eq!(
-            result,
-            Err(InterpreterError::RuntimeError(String::from(
-                "Invalid type for negation: nil"
-            )))
-        );
-    }
-
-    #[test]
     fn add() {
         let mut chunk = Chunk::new();
         chunk.write_constant(Number(1.0), 1);
@@ -638,6 +605,91 @@ mod tests {
             result,
             Err(InterpreterError::RuntimeError(String::from(
                 "Invalid type for division: nil 1"
+            )))
+        );
+    }
+
+    #[test]
+    fn negate() {
+        let mut chunk = Chunk::new();
+        chunk.write_constant(Number(1.2), 1);
+        chunk.write_opcode(OpCode::Negate, 2);
+        chunk.write_opcode(OpCode::Return, 3);
+        let mut output = String::new();
+        let mut adapter = StringAdapter { f: &mut output };
+        let mut vm = VM::new(
+            VMConfig {
+                trace_execution: false,
+                stdout: &mut adapter,
+            },
+            &chunk,
+        );
+        let result = vm.interpret_chunk(&chunk);
+        assert_eq!(result, Ok(Number(-1.2)));
+        assert_eq!(output, "-1.2\n");
+    }
+
+    #[test]
+    fn negate_nil() {
+        let mut chunk = Chunk::new();
+        chunk.write_constant(Nil, 1);
+        chunk.write_opcode(OpCode::Negate, 2);
+        chunk.write_opcode(OpCode::Return, 3);
+        let mut adapter = PrintAdapter {};
+        let mut vm = VM::new(
+            VMConfig {
+                trace_execution: false,
+                stdout: &mut adapter,
+            },
+            &chunk,
+        );
+        let result = vm.interpret_chunk(&chunk);
+        assert_eq!(
+            result,
+            Err(InterpreterError::RuntimeError(String::from(
+                "Invalid type for negation: nil"
+            )))
+        );
+    }
+    
+    #[test]
+    fn not() {
+        let mut chunk = Chunk::new();
+        chunk.write_constant(Boolean(true), 1);
+        chunk.write_opcode(OpCode::Not, 2);
+        chunk.write_opcode(OpCode::Return, 3);
+        let mut output = String::new();
+        let mut adapter = StringAdapter { f: &mut output };
+        let mut vm = VM::new(
+            VMConfig {
+                trace_execution: false,
+                stdout: &mut adapter,
+            },
+            &chunk,
+        );
+        let result = vm.interpret_chunk(&chunk);
+        assert_eq!(result, Ok(Boolean(false)));
+        assert_eq!(output, "false\n");
+    }
+    
+    #[test]
+    fn not_nil() {
+        let mut chunk = Chunk::new();
+        chunk.write_constant(Nil, 1);
+        chunk.write_opcode(OpCode::Not, 2);
+        chunk.write_opcode(OpCode::Return, 3);
+        let mut adapter = PrintAdapter {};
+        let mut vm = VM::new(
+            VMConfig {
+                trace_execution: false,
+                stdout: &mut adapter,
+            },
+            &chunk,
+        );
+        let result = vm.interpret_chunk(&chunk);
+        assert_eq!(result,
+            Err(InterpreterError::RuntimeError(String::from(
+                "Invalid type for not: nil"
             )))
         );
     }

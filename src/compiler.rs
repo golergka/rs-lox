@@ -86,7 +86,7 @@ fn get_rule(token: TokenKind) -> ParseRule {
             precedence: Precedence::Factor,
         },
         TokenKind::Bang => ParseRule {
-            prefix: None,
+            prefix: Some(unary),
             infix: None,
             precedence: Precedence::None,
         },
@@ -351,6 +351,9 @@ fn unary<'a>(compiler: &mut Compiler<'a>) {
         TokenKind::Minus => {
             compiler.emit_opcode(OpCode::Negate);
         }
+        TokenKind::Bang => {
+            compiler.emit_opcode(OpCode::Not);
+        }
         _ => panic!("Invalid unary token kind: {:?}", op_kind),
     };
 }
@@ -458,7 +461,7 @@ mod tests {
     }
 
     #[test]
-    fn unary_minus() {
+    fn negate() {
         let source = "-123".to_string();
         let result = compile(&source);
         println!("Compile result: {:?}", result);
@@ -469,6 +472,23 @@ mod tests {
             OpCode::Constant as u8,
             0,
             OpCode::Negate as u8,
+            OpCode::Return as u8,
+        ];
+        assert_eq!(chunk.get_code(), expect_code);
+    }
+    
+    #[test]
+    fn not() {
+        let source = "!true".to_string();
+        let result = compile(&source);
+        println!("Compile result: {:?}", result);
+        assert!(result.is_ok());
+        let chunk = result.unwrap();
+        assert_eq!(chunk.get_constant(0), Value::Boolean(true));
+        let expect_code = [
+            OpCode::Constant as u8,
+            0,
+            OpCode::Not as u8,
             OpCode::Return as u8,
         ];
         assert_eq!(chunk.get_code(), expect_code);

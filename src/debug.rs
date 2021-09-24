@@ -32,11 +32,12 @@ pub fn disassemble_instruction(chunk: &Chunk, offset: usize) -> Option<(usize, S
         Some(OpCode::Nil) => simple_instruction("OP_NIL", offset),
         Some(OpCode::True) => simple_instruction("OP_TRUE", offset),
         Some(OpCode::False) => simple_instruction("OP_FALSE", offset),
-        Some(OpCode::Negate) => simple_instruction("OP_NEGATE", offset),
         Some(OpCode::Add) => simple_instruction("OP_ADD", offset),
         Some(OpCode::Subtract) => simple_instruction("OP_SUBTRACT", offset),
         Some(OpCode::Multiply) => simple_instruction("OP_MULTIPLY", offset),
         Some(OpCode::Divide) => simple_instruction("OP_DIVIDE", offset),
+        Some(OpCode::Negate) => simple_instruction("OP_NEGATE", offset),
+        Some(OpCode::Not) => simple_instruction("OP_NOT", offset),
         None => {
             return Some((
                 offset + 1,
@@ -175,20 +176,6 @@ mod tests {
             )
         );
     }
-
-    #[test]
-    fn negate() {
-        let mut chunk = Chunk::new();
-        chunk.write_opcode(OpCode::Negate, 1);
-        let result = disassemble_chunk(&chunk, "test chunk");
-        assert_eq!(
-            result,
-            String::from(
-                "== test chunk ==\n\
-                0000    1 OP_NEGATE\n"
-            )
-        );
-    }
     #[test]
     fn add() {
         let mut chunk = Chunk::new();
@@ -256,6 +243,34 @@ mod tests {
                 "== test chunk ==\n\
                 0000  123 OP_CONSTANT 0 '1.2'\n\
                 0002    | OP_RETURN\n"
+            )
+        );
+    }
+
+    #[test]
+    fn negate() {
+        let mut chunk = Chunk::new();
+        chunk.write_opcode(OpCode::Negate, 1);
+        let result = disassemble_chunk(&chunk, "test chunk");
+        assert_eq!(
+            result,
+            String::from(
+                "== test chunk ==\n\
+                0000    1 OP_NEGATE\n"
+            )
+        );
+    }
+    
+    #[test]
+    fn not() {
+        let mut chunk = Chunk::new();
+        chunk.write_opcode(OpCode::Not, 1);
+        let result = disassemble_chunk(&chunk, "test chunk");
+        assert_eq!(
+            result,
+            String::from(
+                "== test chunk ==\n\
+                0000    1 OP_NOT\n"
             )
         );
     }

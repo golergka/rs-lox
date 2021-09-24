@@ -11,11 +11,12 @@ pub enum OpCode {
     Nil,
     True,
     False,
-    Negate,
     Add,
     Subtract,
     Multiply,
     Divide,
+    Not,
+    Negate,
 }
 
 pub type LineNumber = i16;
