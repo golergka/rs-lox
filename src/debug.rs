@@ -1,4 +1,5 @@
 use crate::chunk::*;
+use crate::value::Value::*;
 use crate::value::*;
 use num_traits::FromPrimitive;
 use std::convert::TryInto;
@@ -67,7 +68,7 @@ fn simple_instruction(name: &str, offset: usize) -> (usize, String) {
 fn constant_instruction(name: &str, chunk: &Chunk, offset: usize) -> Option<(usize, String)> {
     let constant = chunk.get_code()[offset + 1];
     let index: usize = constant.try_into().ok()?;
-    let value: f32 = chunk.get_constant(index);
+    let value = chunk.get_constant(index);
     let description = format!("{} {} '{}'", name, constant, print_value(value));
     return Some((offset + 2, description));
 }
@@ -75,7 +76,7 @@ fn constant_instruction(name: &str, chunk: &Chunk, offset: usize) -> Option<(usi
 fn constant_long_instruction(name: &str, chunk: &Chunk, offset: usize) -> Option<(usize, String)> {
     let constant = chunk.read_short(offset + 1)?;
     let index: usize = constant.try_into().ok()?;
-    let value: f32 = chunk.get_constant(index);
+    let value = chunk.get_constant(index);
     let description = format!("{} {} '{}'", name, constant, print_value(value));
     return Some((offset + 3, description));
 }
@@ -102,7 +103,7 @@ mod tests {
     #[test]
     fn constant() {
         let mut chunk = Chunk::new();
-        chunk.write_constant(1.2, 1);
+        chunk.write_constant(Number(1.2), 1);
         let result = disassemble_chunk(&chunk, "test chunk");
         assert_eq!(
             result,
@@ -117,7 +118,7 @@ mod tests {
     fn long_constant() {
         let mut chunk = Chunk::new();
         for i in 0..300 {
-            chunk.write_constant(i as f32, i);
+            chunk.write_constant(Number(i as f32), i);
         }
         let mut target_result = String::from("== test chunk ==\n");
         for i in 0..256 {
@@ -126,7 +127,7 @@ mod tests {
                 i * 2,
                 i,
                 i,
-                print_value(i as f32)
+                print_value(Number(i as f32))
             ));
         }
         for i in 256..300 {
@@ -135,7 +136,7 @@ mod tests {
                 509 + 3 * (i - 255),
                 i,
                 i,
-                print_value(i as f32)
+                print_value(Number(i as f32))
             ));
         }
         let result = disassemble_chunk(&chunk, "test chunk");
@@ -213,7 +214,7 @@ mod tests {
     #[test]
     fn line_numbers() {
         let mut chunk = Chunk::new();
-        chunk.write_constant(1.2, 123);
+        chunk.write_constant(Number(1.2), 123);
         chunk.write_opcode(OpCode::Return, 123);
         let result = disassemble_chunk(&chunk, "test chunk");
         assert_eq!(

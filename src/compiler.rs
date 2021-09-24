@@ -341,7 +341,7 @@ impl<'a> Compiler<'a> {
 
 fn number(compiler: &mut Compiler<'_>) {
     let value = compiler.previous.lexeme.parse::<f32>().unwrap();
-    compiler.emit_constant(value);
+    compiler.emit_constant(Value::Number(value));
 }
 
 fn unary<'a>(compiler: &mut Compiler<'a>) {
@@ -407,7 +407,7 @@ mod tests {
         println!("Compile result: {:?}", result);
         assert!(result.is_ok());
         let chunk = result.unwrap();
-        assert_eq!(chunk.get_constant(0), 123.0);
+        assert_eq!(chunk.get_constant(0), Value::Number(123.0));
         let expect_code = [OpCode::Constant as u8, 0, OpCode::Return as u8];
         assert_eq!(chunk.get_code(), expect_code);
     }
@@ -419,7 +419,7 @@ mod tests {
         println!("Compile result: {:?}", result);
         assert!(result.is_ok());
         let chunk = result.unwrap();
-        assert_eq!(chunk.get_constant(0), 123.0);
+        assert_eq!(chunk.get_constant(0), Value::Number(123.0));
         let expect_code = [
             OpCode::Constant as u8,
             0,

@@ -1,7 +1,7 @@
 use crate::rle::*;
 use crate::value::*;
-use std::convert::TryFrom;
 use num_derive::FromPrimitive;
+use std::convert::TryFrom;
 
 #[derive(Debug, Clone, PartialEq, FromPrimitive)]
 pub enum OpCode {
@@ -127,26 +127,26 @@ mod tests {
     #[test]
     fn adds_correct_constant() {
         let mut chunk = Chunk::new();
-        chunk.add_constant(1.2);
-        assert_eq!(chunk.get_constant(0), 1.2);
+        chunk.add_constant(Value::Number(1.2));
+        assert_eq!(chunk.get_constant(0), Value::Number(1.2));
     }
 
     #[test]
     fn writes_constant() {
         let mut chunk = Chunk::new();
-        chunk.write_constant(1.2, 1);
+        chunk.write_constant(Value::Number(1.2), 1);
         assert_eq!(chunk.get_code(), &[OpCode::Constant as u8, 0]);
-        assert_eq!(chunk.get_constant(0), 1.2);
+        assert_eq!(chunk.get_constant(0), Value::Number(1.2));
     }
 
     #[test]
     fn writes_300_constants() {
         let mut chunk = Chunk::new();
         for i in 0..300 {
-            chunk.write_constant(i as f32, i);
+            chunk.write_constant(Value::Number(i as f32), i);
         }
         for i in 0..300 {
-            assert_eq!(chunk.get_constant(i), i as f32);
+            assert_eq!(chunk.get_constant(i), Value::Number(i as f32));
         }
     }
 }
