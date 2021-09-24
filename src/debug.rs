@@ -33,6 +33,9 @@ pub fn disassemble_instruction(chunk: &Chunk, offset: usize) -> Option<(usize, S
         Some(OpCode::Nil) => simple_instruction("OP_NIL", offset),
         Some(True) => simple_instruction("OP_TRUE", offset),
         Some(False) => simple_instruction("OP_FALSE", offset),
+        Some(Equal) => simple_instruction("OP_EQUAL", offset),
+        Some(Greater) => simple_instruction("OP_GREATER", offset),
+        Some(Less) => simple_instruction("OP_LESS", offset),
         Some(Add) => simple_instruction("OP_ADD", offset),
         Some(Subtract) => simple_instruction("OP_SUBTRACT", offset),
         Some(Multiply) => simple_instruction("OP_MULTIPLY", offset),
@@ -177,6 +180,35 @@ mod tests {
             )
         );
     }
+    
+    #[test]
+    fn equal() {
+        let mut chunk = Chunk::new();
+        chunk.write_opcode(Equal, 1);
+        let result = disassemble_chunk(&chunk, "test chunk");
+        assert_eq!(
+            result,
+            String::from(
+                "== test chunk ==\n\
+                0000    1 OP_EQUAL\n"
+            )
+        );
+    }
+
+    #[test]
+    fn greater() {
+        let mut chunk = Chunk::new();
+        chunk.write_opcode(Greater, 1);
+        let result = disassemble_chunk(&chunk, "test chunk");
+        assert_eq!(
+            result,
+            String::from(
+                "== test chunk ==\n\
+                0000    1 OP_GREATER\n"
+            )
+        );
+    }
+
     #[test]
     fn add() {
         let mut chunk = Chunk::new();

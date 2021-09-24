@@ -94,38 +94,38 @@ fn get_rule(token: TokenKind) -> ParseRule {
         },
         BangEqual => ParseRule {
             prefix: None,
-            infix: None,
-            precedence: Precedence::None,
+            infix: Some(binary),
+            precedence: Precedence::Equality,
         },
-        Equal => ParseRule {
+        TokenKind::Equal => ParseRule {
             prefix: None,
             infix: None,
             precedence: Precedence::None,
         },
         EqualEqual => ParseRule {
             prefix: None,
-            infix: None,
-            precedence: Precedence::None,
+            infix: Some(binary),
+            precedence: Precedence::Equality,
         },
-        Greater => ParseRule {
+        TokenKind::Greater => ParseRule {
             prefix: None,
-            infix: None,
-            precedence: Precedence::None,
+            infix: Some(binary),
+            precedence: Precedence::Comparison,
         },
         GreaterEqual => ParseRule {
             prefix: None,
-            infix: None,
-            precedence: Precedence::None,
+            infix: Some(binary),
+            precedence: Precedence::Comparison,
         },
-        Less => ParseRule {
+        TokenKind::Less => ParseRule {
             prefix: None,
-            infix: None,
-            precedence: Precedence::None,
+            infix: Some(binary),
+            precedence: Precedence::Comparison,
         },
-        LessEqual => ParseRule {
+        TokenKind::LessEqual => ParseRule {
             prefix: None,
-            infix: None,
-            precedence: Precedence::None,
+            infix: Some(binary),
+            precedence: Precedence::Comparison,
         },
         Identifier => ParseRule {
             prefix: None,
@@ -319,15 +319,13 @@ impl<'a> Compiler<'a> {
         self.parse_precedence(Precedence::Assignment);
     }
     // Emitting
-    fn emit_byte(&mut self, byte: u8) {
-        self.current_chunk.write_chunk(byte, self.previous.line)
-    }
     fn emit_opcode(&mut self, opcode: OpCode) {
-        self.emit_byte(opcode as u8);
+        self.current_chunk.write_chunk(opcode as u8, self.previous.line)
     }
-    fn emit_bytes(&mut self, byte1: u8, byte2: u8) {
-        self.emit_byte(byte1);
-        self.emit_byte(byte2);
+    fn emit_opcodes(&mut self, opcodes: &[OpCode]) {
+        for opcode in opcodes {
+            self.emit_opcode(*opcode);
+        }
     }
     fn emit_return(&mut self) {
         self.emit_opcode(OpCode::Return)
@@ -366,6 +364,12 @@ fn binary<'a>(compiler: &mut Compiler<'a>) {
     let precedence = FromPrimitive::from_u8((rule.precedence as u8) + 1).unwrap();
     compiler.parse_precedence(precedence);
     match op_kind {
+        BangEqual => compiler.emit_opcodes(&[OpCode::Equal, Not]),
+        EqualEqual => compiler.emit_opcode(OpCode::Equal),
+        TokenKind::Greater => compiler.emit_opcode(OpCode::Greater),
+        GreaterEqual => compiler.emit_opcodes(&[OpCode::Less, OpCode::Not]),
+        TokenKind::Less => compiler.emit_opcode(OpCode::Less),
+        LessEqual => compiler.emit_opcodes(&[OpCode::Greater, OpCode::Not]),
         Plus => compiler.emit_opcode(Add),
         Minus => compiler.emit_opcode(Subtract),
         Star => compiler.emit_opcode(Multiply),
@@ -483,6 +487,64 @@ mod tests {
         let chunk = result.unwrap();
         assert_eq!(chunk.get_constant(0), Value::Boolean(true));
         let expect_code = [Constant as u8, 0, Not as u8, Return as u8];
+        assert_eq!(chunk.get_code(), expect_code);
+    }
+    #[test]
+    fn equal_equal() {
+        let source = "123 == 123".to_string();
+        let result = compile(&source);
+        println!("Compile result: {:?}", result);
+        assert!(result.is_ok());
+        let chunk = result.unwrap();
+        assert_eq!(chunk.get_constant(0), Value::Number(123.0));
+        assert_eq!(chunk.get_constant(1), Value::Number(123.0));
+        let expect_code = [
+            Constant as u8,
+            0,
+            Constant as u8,
+            1,
+            Equal as u8,
+            Return as u8,
+        ];
+        assert_eq!(chunk.get_code(), expect_code);
+    }
+    #[test]
+    fn bang_equal() {
+        let source = "123 != 123".to_string();
+        let result = compile(&source);
+        println!("Compile result: {:?}", result);
+        assert!(result.is_ok());
+        let chunk = result.unwrap();
+        assert_eq!(chunk.get_constant(0), Value::Number(123.0));
+        assert_eq!(chunk.get_constant(1), Value::Number(123.0));
+        let expect_code = [
+            Constant as u8,
+            0,
+            Constant as u8,
+            1,
+            Equal as u8,
+            Not as u8,
+            Return as u8,
+        ];
+        assert_eq!(chunk.get_code(), expect_code);
+    }
+    #[test]
+    fn greater() {
+        let source = "123 > 123".to_string();
+        let result = compile(&source);
+        println!("Compile result: {:?}", result);
+        assert!(result.is_ok());
+        let chunk = result.unwrap();
+        assert_eq!(chunk.get_constant(0), Value::Number(123.0));
+        assert_eq!(chunk.get_constant(1), Value::Number(123.0));
+        let expect_code = [
+            Constant as u8,
+            0,
+            Constant as u8,
+            1,
+            Greater as u8,
+            Return as u8,
+        ];
         assert_eq!(chunk.get_code(), expect_code);
     }
 }

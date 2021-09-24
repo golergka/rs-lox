@@ -3,7 +3,7 @@ use crate::value::*;
 use num_derive::FromPrimitive;
 use std::convert::TryFrom;
 
-#[derive(Debug, Clone, PartialEq, FromPrimitive)]
+#[derive(Debug, Clone, Copy, PartialEq, FromPrimitive)]
 pub enum OpCode {
     Return,
     Constant,
@@ -11,6 +11,9 @@ pub enum OpCode {
     Nil,
     True,
     False,
+    Equal,
+    Greater,
+    Less,
     Add,
     Subtract,
     Multiply,

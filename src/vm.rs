@@ -1,8 +1,7 @@
 use crate::chunk::*;
 use crate::compiler::ParserError;
 use crate::debug::*;
-use crate::value::Value;
-use crate::value::Value::*;
+use crate::value::{are_equal, is_falsey, Value, Value::*};
 use crate::vm::OpCode::*;
 use crate::InterpreterError::*;
 use num_traits::FromPrimitive;
@@ -65,13 +64,6 @@ macro_rules! vm_print {
     );
 }
 
-fn is_falsey(value: Value) -> bool {
-    return match value {
-        Value::Nil | Boolean(false) => true,
-        _ => false,
-    };
-}
-
 impl<'a> VM<'a> {
     pub fn new(config: VMConfig<'a>, chunk: &'a Chunk) -> Self {
         VM {
@@ -96,6 +88,11 @@ impl<'a> VM<'a> {
         }
         self.stack_top -= 1;
         return Ok(self.stack[self.stack_top]);
+    }
+    fn stack_pop_binary(&mut self) -> Result<(Value, Value), InterpreterError> {
+        let b = self.stack_pop()?;
+        let a = self.stack_pop()?;
+        Ok((a, b))
     }
     pub fn interpret_chunk(&mut self, chunk: &'a Chunk) -> Result<Value, InterpreterError> {
         self.chunk = chunk;
@@ -175,14 +172,25 @@ impl<'a> VM<'a> {
                     self.stack_push(Value::Nil)?;
                 }
                 True => {
-                    self.stack_push(Value::Boolean(true))?;
+                    self.stack_push(Boolean(true))?;
                 }
                 False => {
-                    self.stack_push(Value::Boolean(false))?;
+                    self.stack_push(Boolean(false))?;
+                }
+                Equal => {
+                    let (a, b) = self.stack_pop_binary()?;
+                    self.stack_push(Boolean(are_equal(a, b)))?;
+                }
+                Less => {
+                    let (a, b) = self.stack_pop_binary()?;
+                    self.stack_push(Boolean(a < b))?;
+                }
+                Greater => {
+                    let (a, b) = self.stack_pop_binary()?;
+                    self.stack_push(Boolean(a > b))?;
                 }
                 Add => {
-                    let b = self.stack_pop()?;
-                    let a = self.stack_pop()?;
+                    let (a, b) = self.stack_pop_binary()?;
                     if let (Number(a), Number(b)) = (a, b) {
                         self.stack_push(Number(a + b))?;
                     } else {
@@ -193,8 +201,7 @@ impl<'a> VM<'a> {
                     }
                 }
                 Subtract => {
-                    let b = self.stack_pop()?;
-                    let a = self.stack_pop()?;
+                    let (a, b) = self.stack_pop_binary()?;
                     if let (Number(a), Number(b)) = (a, b) {
                         self.stack_push(Number(a - b))?;
                     } else {
@@ -205,8 +212,7 @@ impl<'a> VM<'a> {
                     }
                 }
                 Multiply => {
-                    let b = self.stack_pop()?;
-                    let a = self.stack_pop()?;
+                    let (a, b) = self.stack_pop_binary()?;
                     if let (Number(a), Number(b)) = (a, b) {
                         self.stack_push(Number(a * b))?;
                     } else {
@@ -217,8 +223,7 @@ impl<'a> VM<'a> {
                     }
                 }
                 Divide => {
-                    let b = self.stack_pop()?;
-                    let a = self.stack_pop()?;
+                    let (a, b) = self.stack_pop_binary()?;
                     if let (Number(a), Number(b)) = (a, b) {
                         self.stack_push(Number(a / b))?;
                     } else {
@@ -670,6 +675,7 @@ mod tests {
         );
         let result = vm.interpret_chunk(&chunk);
         assert_eq!(result, Ok(Boolean(true)));
+        assert_eq!(output, "true\n");
     }
     #[test]
     fn not_zero() {
@@ -688,6 +694,7 @@ mod tests {
         );
         let result = vm.interpret_chunk(&chunk);
         assert_eq!(result, Ok(Boolean(false)));
+        assert_eq!(output, "false\n");
     }
     #[test]
     fn not_one() {
@@ -706,6 +713,130 @@ mod tests {
         );
         let result = vm.interpret_chunk(&chunk);
         assert_eq!(result, Ok(Boolean(false)));
+        assert_eq!(output, "false\n");
+    }
+    #[test]
+    fn equal_true() {
+        let mut chunk = Chunk::new();
+        chunk.write_constant(Number(1.0), 1);
+        chunk.write_constant(Number(1.0), 2);
+        chunk.write_opcode(Equal, 3);
+        chunk.write_opcode(Return, 4);
+        let mut output = String::new();
+        let mut adapter = StringAdapter { f: &mut output };
+        let mut vm = VM::new(
+            VMConfig {
+                trace_execution: false,
+                stdout: &mut adapter,
+            },
+            &chunk,
+        );
+        let result = vm.interpret_chunk(&chunk);
+        assert_eq!(result, Ok(Boolean(true)));
+        assert_eq!(output, "true\n");
+    }
+    #[test]
+    fn equal_false() {
+        let mut chunk = Chunk::new();
+        chunk.write_constant(Number(1.0), 1);
+        chunk.write_constant(Number(2.0), 2);
+        chunk.write_opcode(Equal, 3);
+        chunk.write_opcode(Return, 4);
+        let mut output = String::new();
+        let mut adapter = StringAdapter { f: &mut output };
+        let mut vm = VM::new(
+            VMConfig {
+                trace_execution: false,
+                stdout: &mut adapter,
+            },
+            &chunk,
+        );
+        let result = vm.interpret_chunk(&chunk);
+        assert_eq!(result, Ok(Boolean(false)));
+        assert_eq!(output, "false\n");
+    }
+
+    #[test]
+    fn greater_true() {
+        let mut chunk = Chunk::new();
+        chunk.write_constant(Number(2.0), 2);
+        chunk.write_constant(Number(1.0), 1);
+        chunk.write_opcode(Greater, 3);
+        chunk.write_opcode(Return, 4);
+        let mut output = String::new();
+        let mut adapter = StringAdapter { f: &mut output };
+        let mut vm = VM::new(
+            VMConfig {
+                trace_execution: false,
+                stdout: &mut adapter,
+            },
+            &chunk,
+        );
+        let result = vm.interpret_chunk(&chunk);
+        assert_eq!(result, Ok(Boolean(true)));
+        assert_eq!(output, "true\n");
+    }
+    #[test]
+    fn greater_false() {
+        let mut chunk = Chunk::new();
+        chunk.write_constant(Number(1.0), 1);
+        chunk.write_constant(Number(1.0), 2);
+        chunk.write_opcode(Greater, 3);
+        chunk.write_opcode(Return, 4);
+        let mut output = String::new();
+        let mut adapter = StringAdapter { f: &mut output };
+        let mut vm = VM::new(
+            VMConfig {
+                trace_execution: false,
+                stdout: &mut adapter,
+            },
+            &chunk,
+        );
+        let result = vm.interpret_chunk(&chunk);
+        assert_eq!(result, Ok(Boolean(false)));
+        assert_eq!(output, "false\n");
+    }
+
+    #[test]
+    fn less_true() {
+        let mut chunk = Chunk::new();
+        chunk.write_constant(Number(1.0), 1);
+        chunk.write_constant(Number(2.0), 2);
+        chunk.write_opcode(Less, 3);
+        chunk.write_opcode(Return, 4);
+        let mut output = String::new();
+        let mut adapter = StringAdapter { f: &mut output };
+        let mut vm = VM::new(
+            VMConfig {
+                trace_execution: false,
+                stdout: &mut adapter,
+            },
+            &chunk,
+        );
+        let result = vm.interpret_chunk(&chunk);
+        assert_eq!(result, Ok(Boolean(true)));
+        assert_eq!(output, "true\n");
+    }
+
+    #[test]
+    fn less_false() {
+        let mut chunk = Chunk::new();
+        chunk.write_constant(Number(1.0), 1);
+        chunk.write_constant(Number(1.0), 2);
+        chunk.write_opcode(Less, 3);
+        chunk.write_opcode(Return, 4);
+        let mut output = String::new();
+        let mut adapter = StringAdapter { f: &mut output };
+        let mut vm = VM::new(
+            VMConfig {
+                trace_execution: false,
+                stdout: &mut adapter,
+            },
+            &chunk,
+        );
+        let result = vm.interpret_chunk(&chunk);
+        assert_eq!(result, Ok(Boolean(false)));
+        assert_eq!(output, "false\n");
     }
 
     #[test]
