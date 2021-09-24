@@ -25,7 +25,7 @@ pub enum TokenKind {
     LessEqual,
     // Literals
     Identifier,
-    String,
+    Str,
     Number,
     // Keywords
     And,
@@ -166,7 +166,7 @@ impl<'a> Scanner<'a> {
             match c {
                 '"' => {
                     self.current += 1;
-                    return self.make_token(TokenKind::String);
+                    return self.make_token(TokenKind::Str);
                 }
                 '\n' => {
                     self.line += 1;
@@ -535,7 +535,7 @@ mod tests {
             let input = String::from("\"foobar\"");
             let mut scanner = Scanner::new(&input);
             let result = scanner.scan();
-            assert_eq!(result.kind, TokenKind::String);
+            assert_eq!(result.kind, TokenKind::Str);
             assert_eq!(result.lexeme, "\"foobar\"");
             assert_eq!(result.line, 1);
         }

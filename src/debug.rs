@@ -1,5 +1,6 @@
+use crate::chunk::OpCode::*;
 use crate::chunk::*;
-use crate::value::Value::*;
+use crate::value::Value::Number;
 use crate::value::*;
 use num_traits::FromPrimitive;
 use std::convert::TryInto;
@@ -26,18 +27,18 @@ pub fn disassemble_instruction(chunk: &Chunk, offset: usize) -> Option<(usize, S
     let byte = chunk.read_byte(offset)?;
     let instruction: Option<OpCode> = FromPrimitive::from_u8(byte);
     let (new_offset, instr_description): (usize, String) = match instruction {
-        Some(OpCode::Return) => simple_instruction("OP_RETURN", offset),
-        Some(OpCode::Constant) => constant_instruction("OP_CONSTANT", chunk, offset)?,
-        Some(OpCode::ConstantLong) => constant_long_instruction("OP_CONSTANT_LONG", chunk, offset)?,
+        Some(Return) => simple_instruction("OP_RETURN", offset),
+        Some(Constant) => constant_instruction("OP_CONSTANT", chunk, offset)?,
+        Some(ConstantLong) => constant_long_instruction("OP_CONSTANT_LONG", chunk, offset)?,
         Some(OpCode::Nil) => simple_instruction("OP_NIL", offset),
-        Some(OpCode::True) => simple_instruction("OP_TRUE", offset),
-        Some(OpCode::False) => simple_instruction("OP_FALSE", offset),
-        Some(OpCode::Add) => simple_instruction("OP_ADD", offset),
-        Some(OpCode::Subtract) => simple_instruction("OP_SUBTRACT", offset),
-        Some(OpCode::Multiply) => simple_instruction("OP_MULTIPLY", offset),
-        Some(OpCode::Divide) => simple_instruction("OP_DIVIDE", offset),
-        Some(OpCode::Negate) => simple_instruction("OP_NEGATE", offset),
-        Some(OpCode::Not) => simple_instruction("OP_NOT", offset),
+        Some(True) => simple_instruction("OP_TRUE", offset),
+        Some(False) => simple_instruction("OP_FALSE", offset),
+        Some(Add) => simple_instruction("OP_ADD", offset),
+        Some(Subtract) => simple_instruction("OP_SUBTRACT", offset),
+        Some(Multiply) => simple_instruction("OP_MULTIPLY", offset),
+        Some(Divide) => simple_instruction("OP_DIVIDE", offset),
+        Some(Negate) => simple_instruction("OP_NEGATE", offset),
+        Some(Not) => simple_instruction("OP_NOT", offset),
         None => {
             return Some((
                 offset + 1,
@@ -73,7 +74,7 @@ fn constant_instruction(name: &str, chunk: &Chunk, offset: usize) -> Option<(usi
     let constant = chunk.get_code()[offset + 1];
     let index: usize = constant.try_into().ok()?;
     let value = chunk.get_constant(index);
-    let description = format!("{} {} '{}'", name, constant, print_value(value));
+    let description = format!("{} {} '{}'", name, constant, value);
     return Some((offset + 2, description));
 }
 
@@ -81,7 +82,7 @@ fn constant_long_instruction(name: &str, chunk: &Chunk, offset: usize) -> Option
     let constant = chunk.read_short(offset + 1)?;
     let index: usize = constant.try_into().ok()?;
     let value = chunk.get_constant(index);
-    let description = format!("{} {} '{}'", name, constant, print_value(value));
+    let description = format!("{} {} '{}'", name, constant, value);
     return Some((offset + 3, description));
 }
 
@@ -93,7 +94,7 @@ mod tests {
     #[test]
     fn retrn() {
         let mut chunk = Chunk::new();
-        chunk.write_opcode(OpCode::Return, 1);
+        chunk.write_opcode(Return, 1);
         let result = disassemble_chunk(&chunk, "test chunk");
         assert_eq!(
             result,
@@ -131,7 +132,7 @@ mod tests {
                 i * 2,
                 i,
                 i,
-                print_value(Number(i as f32))
+                Number(i as f32)
             ));
         }
         for i in 256..300 {
@@ -140,17 +141,17 @@ mod tests {
                 509 + 3 * (i - 255),
                 i,
                 i,
-                print_value(Number(i as f32))
+                Number(i as f32)
             ));
         }
         let result = disassemble_chunk(&chunk, "test chunk");
         assert_eq!(result, target_result);
     }
-    
+
     #[test]
     fn nil() {
         let mut chunk = Chunk::new();
-        chunk.write_opcode(OpCode::Nil, 1);
+        chunk.write_opcode(Nil, 1);
         let result = disassemble_chunk(&chunk, "test chunk");
         assert_eq!(
             result,
@@ -164,8 +165,8 @@ mod tests {
     #[test]
     fn true_false() {
         let mut chunk = Chunk::new();
-        chunk.write_opcode(OpCode::True, 1);
-        chunk.write_opcode(OpCode::False, 2);
+        chunk.write_opcode(True, 1);
+        chunk.write_opcode(False, 2);
         let result = disassemble_chunk(&chunk, "test chunk");
         assert_eq!(
             result,
@@ -179,7 +180,7 @@ mod tests {
     #[test]
     fn add() {
         let mut chunk = Chunk::new();
-        chunk.write_opcode(OpCode::Add, 1);
+        chunk.write_opcode(Add, 1);
         let result = disassemble_chunk(&chunk, "test chunk");
         assert_eq!(
             result,
@@ -192,7 +193,7 @@ mod tests {
     #[test]
     fn subtract() {
         let mut chunk = Chunk::new();
-        chunk.write_opcode(OpCode::Subtract, 1);
+        chunk.write_opcode(Subtract, 1);
         let result = disassemble_chunk(&chunk, "test chunk");
         assert_eq!(
             result,
@@ -206,7 +207,7 @@ mod tests {
     #[test]
     fn multiply() {
         let mut chunk = Chunk::new();
-        chunk.write_opcode(OpCode::Multiply, 1);
+        chunk.write_opcode(Multiply, 1);
         let result = disassemble_chunk(&chunk, "test chunk");
         assert_eq!(
             result,
@@ -220,7 +221,7 @@ mod tests {
     #[test]
     fn divide() {
         let mut chunk = Chunk::new();
-        chunk.write_opcode(OpCode::Divide, 1);
+        chunk.write_opcode(Divide, 1);
         let result = disassemble_chunk(&chunk, "test chunk");
         assert_eq!(
             result,
@@ -235,7 +236,7 @@ mod tests {
     fn line_numbers() {
         let mut chunk = Chunk::new();
         chunk.write_constant(Number(1.2), 123);
-        chunk.write_opcode(OpCode::Return, 123);
+        chunk.write_opcode(Return, 123);
         let result = disassemble_chunk(&chunk, "test chunk");
         assert_eq!(
             result,
@@ -250,7 +251,7 @@ mod tests {
     #[test]
     fn negate() {
         let mut chunk = Chunk::new();
-        chunk.write_opcode(OpCode::Negate, 1);
+        chunk.write_opcode(Negate, 1);
         let result = disassemble_chunk(&chunk, "test chunk");
         assert_eq!(
             result,
@@ -260,11 +261,11 @@ mod tests {
             )
         );
     }
-    
+
     #[test]
     fn not() {
         let mut chunk = Chunk::new();
-        chunk.write_opcode(OpCode::Not, 1);
+        chunk.write_opcode(Not, 1);
         let result = disassemble_chunk(&chunk, "test chunk");
         assert_eq!(
             result,

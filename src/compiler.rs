@@ -1,4 +1,6 @@
+use crate::chunk::OpCode::*;
 use crate::chunk::*;
+use crate::scanner::TokenKind::*;
 use crate::scanner::*;
 use crate::value::Value;
 use crate::vm::*;
@@ -30,127 +32,127 @@ struct ParseRule {
 
 fn get_rule(token: TokenKind) -> ParseRule {
     return match token {
-        TokenKind::LeftParen => ParseRule {
+        LeftParen => ParseRule {
             prefix: Some(grouping),
             infix: None,
             precedence: Precedence::None,
         },
-        TokenKind::RightParen => ParseRule {
+        RightParen => ParseRule {
             prefix: None,
             infix: None,
             precedence: Precedence::None,
         },
-        TokenKind::LeftBrace => ParseRule {
+        LeftBrace => ParseRule {
             prefix: None,
             infix: None,
             precedence: Precedence::None,
         },
-        TokenKind::RightBrace => ParseRule {
+        RightBrace => ParseRule {
             prefix: None,
             infix: None,
             precedence: Precedence::None,
         },
-        TokenKind::Comma => ParseRule {
+        Comma => ParseRule {
             prefix: None,
             infix: None,
             precedence: Precedence::None,
         },
-        TokenKind::Dot => ParseRule {
+        Dot => ParseRule {
             prefix: None,
             infix: None,
             precedence: Precedence::None,
         },
-        TokenKind::Minus => ParseRule {
+        Minus => ParseRule {
             prefix: Some(unary),
             infix: Some(binary),
             precedence: Precedence::Term,
         },
-        TokenKind::Plus => ParseRule {
+        Plus => ParseRule {
             prefix: None,
             infix: Some(binary),
             precedence: Precedence::Term,
         },
-        TokenKind::Semicolon => ParseRule {
+        Semicolon => ParseRule {
             prefix: None,
             infix: None,
             precedence: Precedence::None,
         },
-        TokenKind::Slash => ParseRule {
+        Slash => ParseRule {
             prefix: None,
             infix: Some(binary),
             precedence: Precedence::Factor,
         },
-        TokenKind::Star => ParseRule {
+        Star => ParseRule {
             prefix: None,
             infix: Some(binary),
             precedence: Precedence::Factor,
         },
-        TokenKind::Bang => ParseRule {
+        Bang => ParseRule {
             prefix: Some(unary),
             infix: None,
             precedence: Precedence::None,
         },
-        TokenKind::BangEqual => ParseRule {
+        BangEqual => ParseRule {
             prefix: None,
             infix: None,
             precedence: Precedence::None,
         },
-        TokenKind::Equal => ParseRule {
+        Equal => ParseRule {
             prefix: None,
             infix: None,
             precedence: Precedence::None,
         },
-        TokenKind::EqualEqual => ParseRule {
+        EqualEqual => ParseRule {
             prefix: None,
             infix: None,
             precedence: Precedence::None,
         },
-        TokenKind::Greater => ParseRule {
+        Greater => ParseRule {
             prefix: None,
             infix: None,
             precedence: Precedence::None,
         },
-        TokenKind::GreaterEqual => ParseRule {
+        GreaterEqual => ParseRule {
             prefix: None,
             infix: None,
             precedence: Precedence::None,
         },
-        TokenKind::Less => ParseRule {
+        Less => ParseRule {
             prefix: None,
             infix: None,
             precedence: Precedence::None,
         },
-        TokenKind::LessEqual => ParseRule {
+        LessEqual => ParseRule {
             prefix: None,
             infix: None,
             precedence: Precedence::None,
         },
-        TokenKind::Identifier => ParseRule {
+        Identifier => ParseRule {
             prefix: None,
             infix: None,
             precedence: Precedence::None,
         },
-        TokenKind::String => ParseRule {
+        Str => ParseRule {
             prefix: None,
             infix: None,
             precedence: Precedence::None,
         },
-        TokenKind::Number => ParseRule {
+        Number => ParseRule {
             prefix: Some(number),
             infix: None,
             precedence: Precedence::None,
         },
-        TokenKind::And => ParseRule {
+        And => ParseRule {
             prefix: None,
             infix: None,
             precedence: Precedence::None,
         },
-        TokenKind::Class => ParseRule {
+        Class => ParseRule {
             prefix: None,
             infix: None,
             precedence: Precedence::None,
         },
-        TokenKind::Else => ParseRule {
+        Else => ParseRule {
             prefix: None,
             infix: None,
             precedence: Precedence::None,
@@ -160,17 +162,17 @@ fn get_rule(token: TokenKind) -> ParseRule {
             infix: None,
             precedence: Precedence::None,
         },
-        TokenKind::For => ParseRule {
+        For => ParseRule {
             prefix: None,
             infix: None,
             precedence: Precedence::None,
         },
-        TokenKind::Fun => ParseRule {
+        Fun => ParseRule {
             prefix: None,
             infix: None,
             precedence: Precedence::None,
         },
-        TokenKind::If => ParseRule {
+        If => ParseRule {
             prefix: None,
             infix: None,
             precedence: Precedence::None,
@@ -180,12 +182,12 @@ fn get_rule(token: TokenKind) -> ParseRule {
             infix: None,
             precedence: Precedence::None,
         },
-        TokenKind::Or => ParseRule {
+        Or => ParseRule {
             prefix: None,
             infix: None,
             precedence: Precedence::None,
         },
-        TokenKind::Print => ParseRule {
+        Print => ParseRule {
             prefix: None,
             infix: None,
             precedence: Precedence::None,
@@ -195,12 +197,12 @@ fn get_rule(token: TokenKind) -> ParseRule {
             infix: None,
             precedence: Precedence::None,
         },
-        TokenKind::Super => ParseRule {
+        Super => ParseRule {
             prefix: None,
             infix: None,
             precedence: Precedence::None,
         },
-        TokenKind::This => ParseRule {
+        This => ParseRule {
             prefix: None,
             infix: None,
             precedence: Precedence::None,
@@ -210,22 +212,22 @@ fn get_rule(token: TokenKind) -> ParseRule {
             infix: None,
             precedence: Precedence::None,
         },
-        TokenKind::Var => ParseRule {
+        Var => ParseRule {
             prefix: None,
             infix: None,
             precedence: Precedence::None,
         },
-        TokenKind::While => ParseRule {
+        While => ParseRule {
             prefix: None,
             infix: None,
             precedence: Precedence::None,
         },
-        TokenKind::Error => ParseRule {
+        Error => ParseRule {
             prefix: None,
             infix: None,
             precedence: Precedence::None,
         },
-        TokenKind::Eof => ParseRule {
+        Eof => ParseRule {
             prefix: None,
             infix: None,
             precedence: Precedence::None,
@@ -287,7 +289,7 @@ impl<'a> Compiler<'a> {
 
         loop {
             self.current = self.scanner.scan();
-            if self.current.kind != TokenKind::Error {
+            if self.current.kind != Error {
                 break;
             }
             self.error_at_current(self.current.lexeme.to_string())
@@ -348,11 +350,11 @@ fn unary<'a>(compiler: &mut Compiler<'a>) {
     let op_kind = compiler.previous.kind;
     compiler.parse_precedence(Precedence::Unary);
     match op_kind {
-        TokenKind::Minus => {
-            compiler.emit_opcode(OpCode::Negate);
+        Minus => {
+            compiler.emit_opcode(Negate);
         }
-        TokenKind::Bang => {
-            compiler.emit_opcode(OpCode::Not);
+        Bang => {
+            compiler.emit_opcode(Not);
         }
         _ => panic!("Invalid unary token kind: {:?}", op_kind),
     };
@@ -364,15 +366,15 @@ fn binary<'a>(compiler: &mut Compiler<'a>) {
     let precedence = FromPrimitive::from_u8((rule.precedence as u8) + 1).unwrap();
     compiler.parse_precedence(precedence);
     match op_kind {
-        TokenKind::Plus => compiler.emit_opcode(OpCode::Add),
-        TokenKind::Minus => compiler.emit_opcode(OpCode::Subtract),
-        TokenKind::Star => compiler.emit_opcode(OpCode::Multiply),
-        TokenKind::Slash => compiler.emit_opcode(OpCode::Divide),
+        Plus => compiler.emit_opcode(Add),
+        Minus => compiler.emit_opcode(Subtract),
+        Star => compiler.emit_opcode(Multiply),
+        Slash => compiler.emit_opcode(Divide),
         _ => panic!("Invalid binary token kind: {:?}", op_kind),
     }
 }
 
-fn literal<'a> (compiler: &mut Compiler<'a>) {
+fn literal<'a>(compiler: &mut Compiler<'a>) {
     match compiler.previous.kind {
         TokenKind::True => compiler.emit_constant(Value::Boolean(true)),
         TokenKind::False => compiler.emit_constant(Value::Boolean(false)),
@@ -420,10 +422,10 @@ mod tests {
         assert!(result.is_ok());
         let chunk = result.unwrap();
         assert_eq!(chunk.get_constant(0), Value::Number(123.0));
-        let expect_code = [OpCode::Constant as u8, 0, OpCode::Return as u8];
+        let expect_code = [Constant as u8, 0, Return as u8];
         assert_eq!(chunk.get_code(), expect_code);
     }
-    
+
     #[test]
     fn true_literal() {
         let source = "true".to_string();
@@ -432,10 +434,10 @@ mod tests {
         assert!(result.is_ok());
         let chunk = result.unwrap();
         assert_eq!(chunk.get_constant(0), Value::Boolean(true));
-        let expect_code = [OpCode::Constant as u8, 0, OpCode::Return as u8];
+        let expect_code = [Constant as u8, 0, Return as u8];
         assert_eq!(chunk.get_code(), expect_code);
     }
-    
+
     #[test]
     fn false_literal() {
         let source = "false".to_string();
@@ -444,7 +446,7 @@ mod tests {
         assert!(result.is_ok());
         let chunk = result.unwrap();
         assert_eq!(chunk.get_constant(0), Value::Boolean(false));
-        let expect_code = [OpCode::Constant as u8, 0, OpCode::Return as u8];
+        let expect_code = [Constant as u8, 0, Return as u8];
         assert_eq!(chunk.get_code(), expect_code);
     }
 
@@ -456,7 +458,7 @@ mod tests {
         assert!(result.is_ok());
         let chunk = result.unwrap();
         assert_eq!(chunk.get_constant(0), Value::Nil);
-        let expect_code = [OpCode::Constant as u8, 0, OpCode::Return as u8];
+        let expect_code = [Constant as u8, 0, Return as u8];
         assert_eq!(chunk.get_code(), expect_code);
     }
 
@@ -468,15 +470,10 @@ mod tests {
         assert!(result.is_ok());
         let chunk = result.unwrap();
         assert_eq!(chunk.get_constant(0), Value::Number(123.0));
-        let expect_code = [
-            OpCode::Constant as u8,
-            0,
-            OpCode::Negate as u8,
-            OpCode::Return as u8,
-        ];
+        let expect_code = [Constant as u8, 0, Negate as u8, Return as u8];
         assert_eq!(chunk.get_code(), expect_code);
     }
-    
+
     #[test]
     fn not() {
         let source = "!true".to_string();
@@ -485,12 +482,7 @@ mod tests {
         assert!(result.is_ok());
         let chunk = result.unwrap();
         assert_eq!(chunk.get_constant(0), Value::Boolean(true));
-        let expect_code = [
-            OpCode::Constant as u8,
-            0,
-            OpCode::Not as u8,
-            OpCode::Return as u8,
-        ];
+        let expect_code = [Constant as u8, 0, Not as u8, Return as u8];
         assert_eq!(chunk.get_code(), expect_code);
     }
 }

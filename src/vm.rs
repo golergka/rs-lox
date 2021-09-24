@@ -1,10 +1,13 @@
 use crate::chunk::*;
 use crate::compiler::ParserError;
 use crate::debug::*;
+use crate::value::Value;
 use crate::value::Value::*;
-use crate::value::{print_value, Value};
+use crate::vm::OpCode::*;
+use crate::InterpreterError::*;
 use num_traits::FromPrimitive;
 use std::fmt;
+use std::fmt::Formatter;
 use std::io;
 
 pub struct VMConfig<'a> {
@@ -28,10 +31,10 @@ pub enum InterpreterError {
 }
 
 impl fmt::Display for InterpreterError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::result::Result<(), std::fmt::Error> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), std::fmt::Error> {
         return match self {
-            InterpreterError::RuntimeError(s) => write!(f, "Runtime error: {}", s),
-            InterpreterError::CompileError(_) => write!(f, "Compile error"),
+            RuntimeError(s) => write!(f, "Runtime error: {}", s),
+            CompileError(_) => write!(f, "Compile error"),
         };
     }
 }
@@ -55,7 +58,7 @@ macro_rules! vm_print {
             .stdout
             .write_fmt(std::format_args!($($arg)*))
             .map_err(|_| {
-                InterpreterError::RuntimeError(
+                RuntimeError(
                     format!("Failed to write to stdout")
                 )
             })?
@@ -68,13 +71,13 @@ impl<'a> VM<'a> {
             chunk,
             ip: 0,
             config,
-            stack: [Nil; STACK_MAX],
+            stack: [Value::Nil; STACK_MAX],
             stack_top: 0,
         }
     }
     fn stack_push(&mut self, value: Value) -> Result<(), InterpreterError> {
         if self.stack_top == STACK_MAX {
-            return Err(InterpreterError::RuntimeError(format!("Stack overflow")));
+            return Err(RuntimeError(format!("Stack overflow")));
         }
         self.stack[self.stack_top] = value;
         self.stack_top += 1;
@@ -82,7 +85,7 @@ impl<'a> VM<'a> {
     }
     fn stack_pop(&mut self) -> Result<Value, InterpreterError> {
         if self.stack_top == 0 {
-            return Err(InterpreterError::RuntimeError(format!("Stack underflow")));
+            return Err(RuntimeError(format!("Stack underflow")));
         }
         self.stack_top -= 1;
         return Ok(self.stack[self.stack_top]);
@@ -97,9 +100,7 @@ impl<'a> VM<'a> {
         let b = self
             .chunk
             .read_byte(self.ip)
-            .ok_or(InterpreterError::RuntimeError(format!(
-                "Read byte out of bounds"
-            )));
+            .ok_or(RuntimeError(format!("Read byte out of bounds")));
         if b.is_ok() {
             self.ip += 1;
         }
@@ -110,9 +111,7 @@ impl<'a> VM<'a> {
         let s = self
             .chunk
             .read_short(self.ip)
-            .ok_or(InterpreterError::RuntimeError(format!(
-                "Read short out of bounds"
-            )));
+            .ok_or(RuntimeError(format!("Read short out of bounds")));
         if s.is_ok() {
             self.ip += 2;
         }
@@ -132,7 +131,7 @@ impl<'a> VM<'a> {
     fn trace_instruction(&mut self) -> Result<(), InterpreterError> {
         vm_print!(self, "          ");
         for i in 0..self.stack_top {
-            vm_print!(self, "[{}]", print_value(self.stack[i]));
+            vm_print!(self, "[{}]", self.stack[i]);
         }
         vm_print!(self, "\n");
         if let Some((_, decription)) = disassemble_instruction(self.chunk, self.ip) {
@@ -149,110 +148,103 @@ impl<'a> VM<'a> {
                 self.trace_instruction()?;
             }
             let byte = self.read_byte()?;
-            let instruction = FromPrimitive::from_u8(byte).ok_or(
-                InterpreterError::RuntimeError(format!("Unknown opcode: {}", byte)),
-            )?;
+            let instruction = FromPrimitive::from_u8(byte)
+                .ok_or(RuntimeError(format!("Unknown opcode: {}", byte)))?;
             match instruction {
-                OpCode::Return => {
+                Return => {
                     let value = self.stack_pop()?;
-                    vm_print!(self, "{}\n", print_value(value));
+                    vm_print!(self, "{}\n", value);
                     return Ok(value);
                 }
-                OpCode::Constant => {
+                Constant => {
                     let constant = self.read_constant()?;
                     self.stack_push(constant)?;
                 }
-                OpCode::ConstantLong => {
+                ConstantLong => {
                     let constant = self.read_constant_long()?;
                     self.stack_push(constant)?;
                 }
                 OpCode::Nil => {
                     self.stack_push(Value::Nil)?;
                 }
-                OpCode::True => {
+                True => {
                     self.stack_push(Value::Boolean(true))?;
                 }
-                OpCode::False => {
+                False => {
                     self.stack_push(Value::Boolean(false))?;
                 }
-                OpCode::Add => {
+                Add => {
                     let b = self.stack_pop()?;
                     let a = self.stack_pop()?;
                     if let (Number(a), Number(b)) = (a, b) {
                         self.stack_push(Number(a + b))?;
                     } else {
-                        return Err(InterpreterError::RuntimeError(format!(
+                        return Err(RuntimeError(format!(
                             "Invalid type for addition: {} {}",
-                            print_value(a),
-                            print_value(b)
+                            a, b
                         )));
                     }
                 }
-                OpCode::Subtract => {
+                Subtract => {
                     let b = self.stack_pop()?;
                     let a = self.stack_pop()?;
                     if let (Number(a), Number(b)) = (a, b) {
                         self.stack_push(Number(a - b))?;
                     } else {
-                        return Err(InterpreterError::RuntimeError(format!(
+                        return Err(RuntimeError(format!(
                             "Invalid type for subtraction: {} {}",
-                            print_value(a),
-                            print_value(b)
+                            a, b
                         )));
                     }
                 }
-                OpCode::Multiply => {
+                Multiply => {
                     let b = self.stack_pop()?;
                     let a = self.stack_pop()?;
                     if let (Number(a), Number(b)) = (a, b) {
                         self.stack_push(Number(a * b))?;
                     } else {
-                        return Err(InterpreterError::RuntimeError(format!(
+                        return Err(RuntimeError(format!(
                             "Invalid type for multiplication: {} {}",
-                            print_value(a),
-                            print_value(b)
+                            a, b
                         )));
                     }
                 }
-                OpCode::Divide => {
+                Divide => {
                     let b = self.stack_pop()?;
                     let a = self.stack_pop()?;
                     if let (Number(a), Number(b)) = (a, b) {
                         self.stack_push(Number(a / b))?;
                     } else {
-                        return Err(InterpreterError::RuntimeError(format!(
+                        return Err(RuntimeError(format!(
                             "Invalid type for division: {} {}",
-                            print_value(a),
-                            print_value(b)
+                            a, b
                         )));
                     }
                 }
-                OpCode::Negate => {
+                Negate => {
                     let value = self.stack_pop()?;
                     if let Number(n) = value {
                         self.stack_push(Number(-n))?;
                     } else {
-                        return Err(InterpreterError::RuntimeError(format!(
+                        return Err(RuntimeError(format!(
                             "Invalid type for negation: {}",
-                            print_value(value)
+                            value
                         )));
                     }
                 }
-                OpCode::Not => {
+                Not => {
                     let value = self.stack_pop()?;
                     if let Boolean(b) = value {
                         self.stack_push(Boolean(!b))?;
                     } else {
-                        return Err(InterpreterError::RuntimeError(format!(
-                            "Invalid type for not: {}",
-                            print_value(value)
-                        )));
+                        return Err(RuntimeError(format!("Invalid type for not: {}", value)));
                     }
                 }
             }
-            self.config.stdout.flush().map_err(|_| {
-                InterpreterError::RuntimeError(format!("Failed to write to stdout"))
-            })?;
+            self.config
+                .stdout
+                .flush()
+                .map_err(|_| RuntimeError(format!("Failed to write to stdout")))?;
         }
     }
 }
@@ -298,7 +290,7 @@ mod tests {
     #[test]
     fn return_wo_constant() {
         let mut chunk = Chunk::new();
-        chunk.write_opcode(OpCode::Return, 1);
+        chunk.write_opcode(Return, 1);
         let mut output = String::new();
         let mut adapter = StringAdapter { f: &mut output };
         let mut vm = VM::new(
@@ -309,12 +301,7 @@ mod tests {
             &chunk,
         );
         let result = vm.interpret_chunk(&chunk);
-        assert_eq!(
-            result,
-            Err(InterpreterError::RuntimeError(String::from(
-                "Stack underflow"
-            )))
-        );
+        assert_eq!(result, Err(RuntimeError(String::from("Stack underflow"))));
         assert_eq!(
             output,
             "          \n\
@@ -338,9 +325,7 @@ mod tests {
         let result = vm.interpret_chunk(&chunk);
         assert_eq!(
             result,
-            Err(InterpreterError::RuntimeError(String::from(
-                "Read byte out of bounds"
-            )))
+            Err(RuntimeError(String::from("Read byte out of bounds")))
         );
     }
 
@@ -359,19 +344,14 @@ mod tests {
             &chunk,
         );
         let result = vm.interpret_chunk(&chunk);
-        assert_eq!(
-            result,
-            Err(InterpreterError::RuntimeError(String::from(
-                "Stack overflow"
-            )))
-        );
+        assert_eq!(result, Err(RuntimeError(String::from("Stack overflow"))));
     }
 
     #[test]
     fn return_w_number_constant() {
         let mut chunk = Chunk::new();
         chunk.write_constant(Number(1.2), 1);
-        chunk.write_opcode(OpCode::Return, 2);
+        chunk.write_opcode(Return, 2);
         let mut adapter = PrintAdapter {};
         let mut vm = VM::new(
             VMConfig {
@@ -388,7 +368,7 @@ mod tests {
     fn return_w_bool_constant() {
         let mut chunk = Chunk::new();
         chunk.write_constant(Boolean(true), 1);
-        chunk.write_opcode(OpCode::Return, 2);
+        chunk.write_opcode(Return, 2);
         let mut adapter = PrintAdapter {};
         let mut vm = VM::new(
             VMConfig {
@@ -405,7 +385,7 @@ mod tests {
     fn return_w_nil_constant() {
         let mut chunk = Chunk::new();
         chunk.write_constant(Nil, 1);
-        chunk.write_opcode(OpCode::Return, 2);
+        chunk.write_opcode(Return, 2);
         let mut adapter = PrintAdapter {};
         let mut vm = VM::new(
             VMConfig {
@@ -424,7 +404,7 @@ mod tests {
         for i in 0..256 {
             chunk.write_constant(Number(i as f32), i);
         }
-        chunk.write_opcode(OpCode::Return, 256);
+        chunk.write_opcode(Return, 256);
         let mut adapter = PrintAdapter {};
         let mut vm = VM::new(
             VMConfig {
@@ -442,8 +422,8 @@ mod tests {
         let mut chunk = Chunk::new();
         chunk.write_constant(Number(1.0), 1);
         chunk.write_constant(Number(1.0), 2);
-        chunk.write_opcode(OpCode::Add, 3);
-        chunk.write_opcode(OpCode::Return, 4);
+        chunk.write_opcode(Add, 3);
+        chunk.write_opcode(Return, 4);
         let mut adapter = PrintAdapter {};
         let mut vm = VM::new(
             VMConfig {
@@ -461,8 +441,8 @@ mod tests {
         let mut chunk = Chunk::new();
         chunk.write_constant(Nil, 1);
         chunk.write_constant(Number(1.0), 2);
-        chunk.write_opcode(OpCode::Add, 3);
-        chunk.write_opcode(OpCode::Return, 4);
+        chunk.write_opcode(Add, 3);
+        chunk.write_opcode(Return, 4);
         let mut adapter = PrintAdapter {};
         let mut vm = VM::new(
             VMConfig {
@@ -474,7 +454,7 @@ mod tests {
         let result = vm.interpret_chunk(&chunk);
         assert_eq!(
             result,
-            Err(InterpreterError::RuntimeError(String::from(
+            Err(RuntimeError(String::from(
                 "Invalid type for addition: nil 1"
             )))
         );
@@ -485,8 +465,8 @@ mod tests {
         let mut chunk = Chunk::new();
         chunk.write_constant(Number(1.2), 1);
         chunk.write_constant(Number(3.4), 2);
-        chunk.write_opcode(OpCode::Subtract, 3);
-        chunk.write_opcode(OpCode::Return, 4);
+        chunk.write_opcode(Subtract, 3);
+        chunk.write_opcode(Return, 4);
         let mut adapter = PrintAdapter {};
         let mut vm = VM::new(
             VMConfig {
@@ -504,8 +484,8 @@ mod tests {
         let mut chunk = Chunk::new();
         chunk.write_constant(Nil, 1);
         chunk.write_constant(Number(1.0), 2);
-        chunk.write_opcode(OpCode::Subtract, 3);
-        chunk.write_opcode(OpCode::Return, 4);
+        chunk.write_opcode(Subtract, 3);
+        chunk.write_opcode(Return, 4);
         let mut adapter = PrintAdapter {};
         let mut vm = VM::new(
             VMConfig {
@@ -517,7 +497,7 @@ mod tests {
         let result = vm.interpret_chunk(&chunk);
         assert_eq!(
             result,
-            Err(InterpreterError::RuntimeError(String::from(
+            Err(RuntimeError(String::from(
                 "Invalid type for subtraction: nil 1"
             )))
         );
@@ -528,8 +508,8 @@ mod tests {
         let mut chunk = Chunk::new();
         chunk.write_constant(Number(3.0), 1);
         chunk.write_constant(Number(-0.5), 2);
-        chunk.write_opcode(OpCode::Multiply, 3);
-        chunk.write_opcode(OpCode::Return, 4);
+        chunk.write_opcode(Multiply, 3);
+        chunk.write_opcode(Return, 4);
         let mut adapter = PrintAdapter {};
         let mut vm = VM::new(
             VMConfig {
@@ -547,8 +527,8 @@ mod tests {
         let mut chunk = Chunk::new();
         chunk.write_constant(Nil, 1);
         chunk.write_constant(Number(1.0), 2);
-        chunk.write_opcode(OpCode::Multiply, 3);
-        chunk.write_opcode(OpCode::Return, 4);
+        chunk.write_opcode(Multiply, 3);
+        chunk.write_opcode(Return, 4);
         let mut adapter = PrintAdapter {};
         let mut vm = VM::new(
             VMConfig {
@@ -560,7 +540,7 @@ mod tests {
         let result = vm.interpret_chunk(&chunk);
         assert_eq!(
             result,
-            Err(InterpreterError::RuntimeError(String::from(
+            Err(RuntimeError(String::from(
                 "Invalid type for multiplication: nil 1"
             )))
         );
@@ -571,8 +551,8 @@ mod tests {
         let mut chunk = Chunk::new();
         chunk.write_constant(Number(10.0), 1);
         chunk.write_constant(Number(2.0), 2);
-        chunk.write_opcode(OpCode::Divide, 3);
-        chunk.write_opcode(OpCode::Return, 4);
+        chunk.write_opcode(Divide, 3);
+        chunk.write_opcode(Return, 4);
         let mut adapter = PrintAdapter {};
         let mut vm = VM::new(
             VMConfig {
@@ -590,8 +570,8 @@ mod tests {
         let mut chunk = Chunk::new();
         chunk.write_constant(Nil, 1);
         chunk.write_constant(Number(1.0), 2);
-        chunk.write_opcode(OpCode::Divide, 3);
-        chunk.write_opcode(OpCode::Return, 4);
+        chunk.write_opcode(Divide, 3);
+        chunk.write_opcode(Return, 4);
         let mut adapter = PrintAdapter {};
         let mut vm = VM::new(
             VMConfig {
@@ -603,7 +583,7 @@ mod tests {
         let result = vm.interpret_chunk(&chunk);
         assert_eq!(
             result,
-            Err(InterpreterError::RuntimeError(String::from(
+            Err(RuntimeError(String::from(
                 "Invalid type for division: nil 1"
             )))
         );
@@ -613,8 +593,8 @@ mod tests {
     fn negate() {
         let mut chunk = Chunk::new();
         chunk.write_constant(Number(1.2), 1);
-        chunk.write_opcode(OpCode::Negate, 2);
-        chunk.write_opcode(OpCode::Return, 3);
+        chunk.write_opcode(Negate, 2);
+        chunk.write_opcode(Return, 3);
         let mut output = String::new();
         let mut adapter = StringAdapter { f: &mut output };
         let mut vm = VM::new(
@@ -633,8 +613,8 @@ mod tests {
     fn negate_nil() {
         let mut chunk = Chunk::new();
         chunk.write_constant(Nil, 1);
-        chunk.write_opcode(OpCode::Negate, 2);
-        chunk.write_opcode(OpCode::Return, 3);
+        chunk.write_opcode(Negate, 2);
+        chunk.write_opcode(Return, 3);
         let mut adapter = PrintAdapter {};
         let mut vm = VM::new(
             VMConfig {
@@ -646,18 +626,15 @@ mod tests {
         let result = vm.interpret_chunk(&chunk);
         assert_eq!(
             result,
-            Err(InterpreterError::RuntimeError(String::from(
-                "Invalid type for negation: nil"
-            )))
+            Err(RuntimeError(String::from("Invalid type for negation: nil")))
         );
     }
-    
     #[test]
     fn not() {
         let mut chunk = Chunk::new();
         chunk.write_constant(Boolean(true), 1);
-        chunk.write_opcode(OpCode::Not, 2);
-        chunk.write_opcode(OpCode::Return, 3);
+        chunk.write_opcode(Not, 2);
+        chunk.write_opcode(Return, 3);
         let mut output = String::new();
         let mut adapter = StringAdapter { f: &mut output };
         let mut vm = VM::new(
@@ -671,13 +648,12 @@ mod tests {
         assert_eq!(result, Ok(Boolean(false)));
         assert_eq!(output, "false\n");
     }
-    
     #[test]
     fn not_nil() {
         let mut chunk = Chunk::new();
         chunk.write_constant(Nil, 1);
-        chunk.write_opcode(OpCode::Not, 2);
-        chunk.write_opcode(OpCode::Return, 3);
+        chunk.write_opcode(Not, 2);
+        chunk.write_opcode(Return, 3);
         let mut adapter = PrintAdapter {};
         let mut vm = VM::new(
             VMConfig {
@@ -687,10 +663,9 @@ mod tests {
             &chunk,
         );
         let result = vm.interpret_chunk(&chunk);
-        assert_eq!(result,
-            Err(InterpreterError::RuntimeError(String::from(
-                "Invalid type for not: nil"
-            )))
+        assert_eq!(
+            result,
+            Err(RuntimeError(String::from("Invalid type for not: nil")))
         );
     }
 
@@ -699,11 +674,11 @@ mod tests {
         let mut chunk = Chunk::new();
         chunk.write_constant(Number(1.2), 1);
         chunk.write_constant(Number(3.4), 1);
-        chunk.write_opcode(OpCode::Add, 1);
+        chunk.write_opcode(Add, 1);
         chunk.write_constant(Number(5.6), 1);
-        chunk.write_opcode(OpCode::Divide, 1);
-        chunk.write_opcode(OpCode::Negate, 1);
-        chunk.write_opcode(OpCode::Return, 1);
+        chunk.write_opcode(Divide, 1);
+        chunk.write_opcode(Negate, 1);
+        chunk.write_opcode(Return, 1);
         let mut adapter = PrintAdapter {};
         let mut vm = VM::new(
             VMConfig {
