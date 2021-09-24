@@ -156,7 +156,7 @@ fn get_rule(token: TokenKind) -> ParseRule {
             precedence: Precedence::None,
         },
         TokenKind::False => ParseRule {
-            prefix: None,
+            prefix: Some(literal),
             infix: None,
             precedence: Precedence::None,
         },
@@ -176,7 +176,7 @@ fn get_rule(token: TokenKind) -> ParseRule {
             precedence: Precedence::None,
         },
         TokenKind::Nil => ParseRule {
-            prefix: None,
+            prefix: Some(literal),
             infix: None,
             precedence: Precedence::None,
         },
@@ -206,7 +206,7 @@ fn get_rule(token: TokenKind) -> ParseRule {
             precedence: Precedence::None,
         },
         TokenKind::True => ParseRule {
-            prefix: None,
+            prefix: Some(literal),
             infix: None,
             precedence: Precedence::None,
         },
@@ -369,6 +369,15 @@ fn binary<'a>(compiler: &mut Compiler<'a>) {
     }
 }
 
+fn literal<'a> (compiler: &mut Compiler<'a>) {
+    match compiler.previous.kind {
+        TokenKind::True => compiler.emit_constant(Value::Boolean(true)),
+        TokenKind::False => compiler.emit_constant(Value::Boolean(false)),
+        TokenKind::Nil => compiler.emit_constant(Value::Nil),
+        _ => panic!("Invalid literal token kind: {:?}", compiler.previous.kind),
+    }
+}
+
 fn grouping<'a>(compiler: &mut Compiler<'a>) {
     compiler.expression();
     compiler.consume(
@@ -408,6 +417,42 @@ mod tests {
         assert!(result.is_ok());
         let chunk = result.unwrap();
         assert_eq!(chunk.get_constant(0), Value::Number(123.0));
+        let expect_code = [OpCode::Constant as u8, 0, OpCode::Return as u8];
+        assert_eq!(chunk.get_code(), expect_code);
+    }
+    
+    #[test]
+    fn true_literal() {
+        let source = "true".to_string();
+        let result = compile(&source);
+        println!("Compile result: {:?}", result);
+        assert!(result.is_ok());
+        let chunk = result.unwrap();
+        assert_eq!(chunk.get_constant(0), Value::Boolean(true));
+        let expect_code = [OpCode::Constant as u8, 0, OpCode::Return as u8];
+        assert_eq!(chunk.get_code(), expect_code);
+    }
+    
+    #[test]
+    fn false_literal() {
+        let source = "false".to_string();
+        let result = compile(&source);
+        println!("Compile result: {:?}", result);
+        assert!(result.is_ok());
+        let chunk = result.unwrap();
+        assert_eq!(chunk.get_constant(0), Value::Boolean(false));
+        let expect_code = [OpCode::Constant as u8, 0, OpCode::Return as u8];
+        assert_eq!(chunk.get_code(), expect_code);
+    }
+
+    #[test]
+    fn nil_literal() {
+        let source = "nil".to_string();
+        let result = compile(&source);
+        println!("Compile result: {:?}", result);
+        assert!(result.is_ok());
+        let chunk = result.unwrap();
+        assert_eq!(chunk.get_constant(0), Value::Nil);
         let expect_code = [OpCode::Constant as u8, 0, OpCode::Return as u8];
         assert_eq!(chunk.get_code(), expect_code);
     }

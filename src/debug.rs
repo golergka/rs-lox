@@ -26,9 +26,12 @@ pub fn disassemble_instruction(chunk: &Chunk, offset: usize) -> Option<(usize, S
     let byte = chunk.read_byte(offset)?;
     let instruction: Option<OpCode> = FromPrimitive::from_u8(byte);
     let (new_offset, instr_description): (usize, String) = match instruction {
+        Some(OpCode::Return) => simple_instruction("OP_RETURN", offset),
         Some(OpCode::Constant) => constant_instruction("OP_CONSTANT", chunk, offset)?,
         Some(OpCode::ConstantLong) => constant_long_instruction("OP_CONSTANT_LONG", chunk, offset)?,
-        Some(OpCode::Return) => simple_instruction("OP_RETURN", offset),
+        Some(OpCode::Nil) => simple_instruction("OP_NIL", offset),
+        Some(OpCode::True) => simple_instruction("OP_TRUE", offset),
+        Some(OpCode::False) => simple_instruction("OP_FALSE", offset),
         Some(OpCode::Negate) => simple_instruction("OP_NEGATE", offset),
         Some(OpCode::Add) => simple_instruction("OP_ADD", offset),
         Some(OpCode::Subtract) => simple_instruction("OP_SUBTRACT", offset),
@@ -141,6 +144,36 @@ mod tests {
         }
         let result = disassemble_chunk(&chunk, "test chunk");
         assert_eq!(result, target_result);
+    }
+    
+    #[test]
+    fn nil() {
+        let mut chunk = Chunk::new();
+        chunk.write_opcode(OpCode::Nil, 1);
+        let result = disassemble_chunk(&chunk, "test chunk");
+        assert_eq!(
+            result,
+            String::from(
+                "== test chunk ==\n\
+                0000    1 OP_NIL\n"
+            )
+        );
+    }
+
+    #[test]
+    fn true_false() {
+        let mut chunk = Chunk::new();
+        chunk.write_opcode(OpCode::True, 1);
+        chunk.write_opcode(OpCode::False, 2);
+        let result = disassemble_chunk(&chunk, "test chunk");
+        assert_eq!(
+            result,
+            String::from(
+                "== test chunk ==\n\
+                0000    1 OP_TRUE\n\
+                0001    2 OP_FALSE\n"
+            )
+        );
     }
 
     #[test]

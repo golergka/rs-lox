@@ -166,6 +166,15 @@ impl<'a> VM<'a> {
                     let constant = self.read_constant_long()?;
                     self.stack_push(constant)?;
                 }
+                OpCode::Nil => {
+                    self.stack_push(Value::Nil)?;
+                }
+                OpCode::True => {
+                    self.stack_push(Value::Boolean(true))?;
+                }
+                OpCode::False => {
+                    self.stack_push(Value::Boolean(false))?;
+                }
                 OpCode::Negate => {
                     let value = self.stack_pop()?;
                     if let Number(n) = value {
