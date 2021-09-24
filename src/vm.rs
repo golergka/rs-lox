@@ -65,6 +65,13 @@ macro_rules! vm_print {
     );
 }
 
+fn is_falsey(value: Value) -> bool {
+    return match value {
+        Value::Nil | Boolean(false) => true,
+        _ => false,
+    };
+}
+
 impl<'a> VM<'a> {
     pub fn new(config: VMConfig<'a>, chunk: &'a Chunk) -> Self {
         VM {
@@ -234,11 +241,7 @@ impl<'a> VM<'a> {
                 }
                 Not => {
                     let value = self.stack_pop()?;
-                    if let Boolean(b) = value {
-                        self.stack_push(Boolean(!b))?;
-                    } else {
-                        return Err(RuntimeError(format!("Invalid type for not: {}", value)));
-                    }
+                    self.stack_push(Value::Boolean(is_falsey(value)))?;
                 }
             }
             self.config
@@ -629,6 +632,7 @@ mod tests {
             Err(RuntimeError(String::from("Invalid type for negation: nil")))
         );
     }
+
     #[test]
     fn not() {
         let mut chunk = Chunk::new();
@@ -648,13 +652,15 @@ mod tests {
         assert_eq!(result, Ok(Boolean(false)));
         assert_eq!(output, "false\n");
     }
+
     #[test]
     fn not_nil() {
         let mut chunk = Chunk::new();
         chunk.write_constant(Nil, 1);
         chunk.write_opcode(Not, 2);
         chunk.write_opcode(Return, 3);
-        let mut adapter = PrintAdapter {};
+        let mut output = String::new();
+        let mut adapter = StringAdapter { f: &mut output };
         let mut vm = VM::new(
             VMConfig {
                 trace_execution: false,
@@ -663,10 +669,43 @@ mod tests {
             &chunk,
         );
         let result = vm.interpret_chunk(&chunk);
-        assert_eq!(
-            result,
-            Err(RuntimeError(String::from("Invalid type for not: nil")))
+        assert_eq!(result, Ok(Boolean(true)));
+    }
+    #[test]
+    fn not_zero() {
+        let mut chunk = Chunk::new();
+        chunk.write_constant(Number(0.0), 1);
+        chunk.write_opcode(Not, 2);
+        chunk.write_opcode(Return, 3);
+        let mut output = String::new();
+        let mut adapter = StringAdapter { f: &mut output };
+        let mut vm = VM::new(
+            VMConfig {
+                trace_execution: false,
+                stdout: &mut adapter,
+            },
+            &chunk,
         );
+        let result = vm.interpret_chunk(&chunk);
+        assert_eq!(result, Ok(Boolean(false)));
+    }
+    #[test]
+    fn not_one() {
+        let mut chunk = Chunk::new();
+        chunk.write_constant(Number(1.0), 1);
+        chunk.write_opcode(Not, 2);
+        chunk.write_opcode(Return, 3);
+        let mut output = String::new();
+        let mut adapter = StringAdapter { f: &mut output };
+        let mut vm = VM::new(
+            VMConfig {
+                trace_execution: false,
+                stdout: &mut adapter,
+            },
+            &chunk,
+        );
+        let result = vm.interpret_chunk(&chunk);
+        assert_eq!(result, Ok(Boolean(false)));
     }
 
     #[test]
