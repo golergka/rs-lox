@@ -29,7 +29,7 @@ fn repl() -> Result<(), Box<dyn Error>> {
         print!("> ");
         std::io::stdout().flush()?;
         let input: String = read!("{}\n");
-        match compile(input) {
+        match compile(&input) {
             Ok(chunk) => match vm.interpret_chunk(&chunk) {
                 Ok(result) => println!("{}", result),
                 Err(error) => println!("{}", error),
@@ -45,7 +45,7 @@ fn run_file(path: &str) -> Result<(), Box<dyn Error>> {
     let mut contents = String::new();
     let mut stdout = std::io::stdout();
     file.read_to_string(&mut contents)?;
-    return match compile(contents) {
+    return match compile(&contents) {
         Ok(chunk) => {
             let mut vm = VM::new(
                 VMConfig {

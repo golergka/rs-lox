@@ -233,16 +233,17 @@ fn get_rule(token: TokenKind) -> ParseRule {
     };
 }
 
-pub struct ParserError<'a> {
+#[derive(Debug, PartialEq, Eq)]
+pub struct ParserError {
     pub message: String,
-    pub token: Token<'a>,
+    pub token: Token,
 }
 
 struct Compiler<'a> {
     scanner: Scanner<'a>,
-    current: Token<'a>,
-    previous: Token<'a>,
-    errors: Vec<ParserError<'a>>,
+    current: Token,
+    previous: Token,
+    errors: Vec<ParserError>,
     panic_mode: bool,
     current_chunk: Chunk,
 }
@@ -251,7 +252,7 @@ impl<'a> Compiler<'a> {
     fn new(mut scanner: Scanner<'a>) -> Compiler<'a> {
         let first = scanner.scan();
         Compiler {
-            current: first,
+            current: first.clone(),
             previous: first,
             scanner,
             panic_mode: false,
@@ -260,7 +261,7 @@ impl<'a> Compiler<'a> {
         }
     }
     // Error handling
-    fn error_at(&mut self, token: Token<'a>, message: String) {
+    fn error_at(&mut self, token: Token, message: String) {
         if self.panic_mode {
             return;
         }
@@ -268,10 +269,10 @@ impl<'a> Compiler<'a> {
         self.errors.push(ParserError { token, message })
     }
     fn error_at_current(&mut self, message: String) {
-        self.error_at(self.current, message)
+        self.error_at(self.current.clone(), message)
     }
     fn error(&mut self, message: String) {
-        self.error_at(self.previous, message)
+        self.error_at(self.previous.clone(), message)
     }
     // Parsing
     fn consume(&mut self, kind: TokenKind, message: String) {
@@ -282,7 +283,7 @@ impl<'a> Compiler<'a> {
         }
     }
     fn advance(&mut self) {
-        self.previous = self.current;
+        self.previous = self.current.clone();
 
         loop {
             self.current = self.scanner.scan();
@@ -376,14 +377,55 @@ fn grouping<'a>(compiler: &mut Compiler<'a>) {
     );
 }
 
-pub fn compile(source: String) -> Result<Chunk, InterpreterError> {
+pub fn compile<'a>(source: &'a String) -> Result<Chunk, InterpreterError> {
     let scanner = Scanner::new(&source);
     let mut compiler = Compiler::new(scanner);
     compiler.expression();
     compiler.consume(TokenKind::Eof, String::from("Expect end of expression."));
     match compiler.errors.len() {
         0 => Ok(compiler.end()),
-        // TODO combine Ver<ParserError> into a CompilerError
-        _ => Err(InterpreterError::CompileError()),
+        _ => Err(InterpreterError::CompileError(compiler.errors)),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn empty() {
+        let source = "".to_string();
+        let result = compile(&source);
+        println!("Compile result: {:?}", result);
+        assert!(!result.is_ok());
+    }
+
+    #[test]
+    fn number_literal() {
+        let source = "123".to_string();
+        let result = compile(&source);
+        println!("Compile result: {:?}", result);
+        assert!(result.is_ok());
+        let chunk = result.unwrap();
+        assert_eq!(chunk.get_constant(0), 123.0);
+        let expect_code = [OpCode::Constant as u8, 0, OpCode::Return as u8];
+        assert_eq!(chunk.get_code(), expect_code);
+    }
+
+    #[test]
+    fn unary_minus() {
+        let source = "-123".to_string();
+        let result = compile(&source);
+        println!("Compile result: {:?}", result);
+        assert!(result.is_ok());
+        let chunk = result.unwrap();
+        assert_eq!(chunk.get_constant(0), 123.0);
+        let expect_code = [
+            OpCode::Constant as u8,
+            0,
+            OpCode::Negate as u8,
+            OpCode::Return as u8,
+        ];
+        assert_eq!(chunk.get_code(), expect_code);
     }
 }

@@ -49,16 +49,20 @@ pub enum TokenKind {
     Eof,
 }
 
-#[derive(Debug, Clone, Copy)]
-pub struct Token<'a> {
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Token {
     pub kind: TokenKind,
-    pub lexeme: &'a str,
+    pub lexeme: String,
     pub line: LineNumber,
 }
 
-impl<'a> Token<'a> {
-    pub fn new(kind: TokenKind, lexeme: &'a str, line: LineNumber) -> Token<'a> {
-        Token { kind, lexeme, line }
+impl Token {
+    pub fn new(kind: TokenKind, lexeme: &str, line: LineNumber) -> Token {
+        Token {
+            kind,
+            lexeme: String::from(lexeme),
+            line,
+        }
     }
 }
 
@@ -78,7 +82,7 @@ fn is_alpha(c: char) -> bool {
 }
 
 impl<'a> Scanner<'a> {
-    pub fn new(input: &String) -> Scanner {
+    pub fn new(input: &'a String) -> Scanner {
         Scanner {
             input,
             start: 0,
@@ -86,11 +90,11 @@ impl<'a> Scanner<'a> {
             line: 1,
         }
     }
-    fn make_token(&self, kind: TokenKind) -> Token<'a> {
+    fn make_token(&self, kind: TokenKind) -> Token {
         let lexeme = &self.input[self.start..self.current];
         Token::new(kind, lexeme, self.line)
     }
-    fn error_token(&self, message: &'a str) -> Token<'a> {
+    fn error_token(&self, message: &'a str) -> Token {
         Token::new(TokenKind::Error, message, self.line)
     }
     fn peek(&self) -> Option<char> {
@@ -157,7 +161,7 @@ impl<'a> Scanner<'a> {
             }
         }
     }
-    fn string(&mut self) -> Token<'a> {
+    fn string(&mut self) -> Token {
         while let Some(c) = self.peek() {
             match c {
                 '"' => {
@@ -175,7 +179,7 @@ impl<'a> Scanner<'a> {
         }
         self.error_token("Unterminated string.")
     }
-    fn number(&mut self) -> Token<'a> {
+    fn number(&mut self) -> Token {
         self.match_while(is_digit);
         if let Some(c) = self.peek() {
             if c == '.' {
@@ -233,11 +237,11 @@ impl<'a> Scanner<'a> {
         };
         return TokenKind::Identifier;
     }
-    fn identifier(&mut self) -> Token<'a> {
+    fn identifier(&mut self) -> Token {
         self.match_while(|c| is_alpha(c) || is_digit(c));
         self.make_token(self.identifier_type())
     }
-    pub fn scan(&mut self) -> Token<'a> {
+    pub fn scan(&mut self) -> Token {
         self.skip_whitespace();
         self.start = self.current;
         let next = self.advance();
@@ -506,7 +510,6 @@ mod tests {
             assert_eq!(result.lexeme, "foobar");
             assert_eq!(result.line, 1);
         }
-        
         #[test]
         fn identifier_with_underscore() {
             let input = String::from("foo_bar");
@@ -556,7 +559,6 @@ mod tests {
             assert_eq!(result.lexeme, "123");
             assert_eq!(result.line, 1);
         }
-        
         #[test]
         fn number_with_decimal() {
             let input = String::from("123.456");

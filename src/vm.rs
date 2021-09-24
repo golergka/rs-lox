@@ -1,3 +1,4 @@
+use crate::compiler::ParserError;
 use crate::chunk::*;
 use crate::debug::*;
 use crate::value::*;
@@ -21,7 +22,7 @@ impl std::fmt::Debug for VMConfig<'_> {
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum InterpreterError {
-    CompileError(),
+    CompileError(Vec<ParserError>),
     RuntimeError(String),
 }
 
@@ -29,7 +30,7 @@ impl fmt::Display for InterpreterError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::result::Result<(), std::fmt::Error> {
         return match self {
             InterpreterError::RuntimeError(s) => write!(f, "Runtime error: {}", s),
-            InterpreterError::CompileError() => write!(f, "Compile error"),
+            InterpreterError::CompileError(_) => write!(f, "Compile error"),
         };
     }
 }
