@@ -371,11 +371,11 @@ mod tests {
         let result = vm.interpret_chunk(&chunk);
         assert_eq!(result, Ok(Number(1.2)));
     }
-
+    
     #[test]
-    fn return_w_bool_constant() {
+    fn return_w_bool() {
         let mut chunk = Chunk::new();
-        chunk.write_constant(Boolean(true), 1);
+        chunk.write_opcode(True, 1);
         chunk.write_opcode(Return, 2);
         let mut adapter = PrintAdapter {};
         let mut vm = VM::new(
@@ -390,9 +390,9 @@ mod tests {
     }
 
     #[test]
-    fn return_w_nil_constant() {
+    fn return_w_nil() {
         let mut chunk = Chunk::new();
-        chunk.write_constant(Nil, 1);
+        chunk.write_opcode(OpCode::Nil, 1);
         chunk.write_opcode(Return, 2);
         let mut adapter = PrintAdapter {};
         let mut vm = VM::new(

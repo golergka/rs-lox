@@ -380,9 +380,9 @@ fn binary<'a>(compiler: &mut Compiler<'a>) {
 
 fn literal<'a>(compiler: &mut Compiler<'a>) {
     match compiler.previous.kind {
-        TokenKind::True => compiler.emit_constant(Value::Boolean(true)),
-        TokenKind::False => compiler.emit_constant(Value::Boolean(false)),
-        TokenKind::Nil => compiler.emit_constant(Value::Nil),
+        TokenKind::True => compiler.emit_opcode(OpCode::True),
+        TokenKind::False => compiler.emit_opcode(OpCode::False),
+        TokenKind::Nil => compiler.emit_opcode(OpCode::Nil),
         _ => panic!("Invalid literal token kind: {:?}", compiler.previous.kind),
     }
 }
@@ -437,8 +437,7 @@ mod tests {
         println!("Compile result: {:?}", result);
         assert!(result.is_ok());
         let chunk = result.unwrap();
-        assert_eq!(chunk.get_constant(0), Value::Boolean(true));
-        let expect_code = [Constant as u8, 0, Return as u8];
+        let expect_code = [True as u8, Return as u8];
         assert_eq!(chunk.get_code(), expect_code);
     }
 
@@ -449,8 +448,7 @@ mod tests {
         println!("Compile result: {:?}", result);
         assert!(result.is_ok());
         let chunk = result.unwrap();
-        assert_eq!(chunk.get_constant(0), Value::Boolean(false));
-        let expect_code = [Constant as u8, 0, Return as u8];
+        let expect_code = [False as u8, Return as u8];
         assert_eq!(chunk.get_code(), expect_code);
     }
 
@@ -461,8 +459,7 @@ mod tests {
         println!("Compile result: {:?}", result);
         assert!(result.is_ok());
         let chunk = result.unwrap();
-        assert_eq!(chunk.get_constant(0), Value::Nil);
-        let expect_code = [Constant as u8, 0, Return as u8];
+        let expect_code = [Nil as u8, Return as u8];
         assert_eq!(chunk.get_code(), expect_code);
     }
 
@@ -485,8 +482,7 @@ mod tests {
         println!("Compile result: {:?}", result);
         assert!(result.is_ok());
         let chunk = result.unwrap();
-        assert_eq!(chunk.get_constant(0), Value::Boolean(true));
-        let expect_code = [Constant as u8, 0, Not as u8, Return as u8];
+        let expect_code = [True as u8, Not as u8, Return as u8];
         assert_eq!(chunk.get_code(), expect_code);
     }
     #[test]
