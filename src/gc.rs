@@ -2,6 +2,7 @@ use std::marker::PhantomData;
 use std::ops::Deref;
 use std::ptr::{null_mut, NonNull};
 
+#[derive(PartialEq, Debug)]
 pub enum GCValue {
     String(String),
 }
@@ -84,7 +85,7 @@ mod test {
     fn allocates_string() {
         let mut gc = GC::new();
         let s = gc.alloc_string("hello world".to_string());
-        assert_eq!(s, GCValue::String("hello world".to_string()));
+        assert_eq!(*s, GCValue::String("hello world".to_string()));
     }
 
 }

@@ -10,6 +10,7 @@ mod gc;
 use crate::chunk::Chunk;
 use crate::compiler::compile;
 use crate::vm::*;
+use crate::gc::GC;
 use std::env;
 use std::error::Error;
 
@@ -30,7 +31,8 @@ fn repl() -> Result<(), Box<dyn Error>> {
         print!("> ");
         std::io::stdout().flush()?;
         let input: String = read!("{}\n");
-        match compile(&input) {
+        let mut gc = GC::new();
+        match compile(&input, &mut gc) {
             Ok(chunk) => match vm.interpret_chunk(&chunk) {
                 Ok(result) => println!("{}", result),
                 Err(error) => println!("{}", error),
@@ -46,7 +48,8 @@ fn run_file(path: &str) -> Result<(), Box<dyn Error>> {
     let mut contents = String::new();
     let mut stdout = std::io::stdout();
     file.read_to_string(&mut contents)?;
-    return match compile(&contents) {
+    let mut gc = GC::new();
+    return match compile(&contents, &mut gc) {
         Ok(chunk) => {
             let mut vm = VM::new(
                 VMConfig {
