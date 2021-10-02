@@ -21,18 +21,19 @@ fn repl() -> Result<(), Box<dyn Error>> {
 
         let mut stdout = std::io::stdout();
         let empty_chunk = Chunk::new();
+        let mut gc = GC::new();
         let mut vm = VM::new(
             VMConfig {
                 trace_execution: true,
                 stdout: &mut stdout,
             },
             &empty_chunk,
+            &mut gc
         );
         print!("> ");
         std::io::stdout().flush()?;
         let input: String = read!("{}\n");
-        let mut gc = GC::new();
-        match compile(&input, &mut gc) {
+        match vm.with_gc(|gc| compile(&input, gc)) {
             Ok(chunk) => match vm.interpret_chunk(&chunk) {
                 Ok(result) => println!("{}", result),
                 Err(error) => println!("{}", error),
@@ -57,6 +58,7 @@ fn run_file(path: &str) -> Result<(), Box<dyn Error>> {
                     stdout: &mut stdout,
                 },
                 &chunk,
+                &mut gc
             );
             match vm.run() {
                 Ok(result) => {

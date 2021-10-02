@@ -4,6 +4,7 @@ use crate::debug::*;
 use crate::value::{are_equal, is_falsey, Value, Value::*};
 use crate::vm::OpCode::*;
 use crate::InterpreterError::*;
+use crate::GC;
 use num_traits::FromPrimitive;
 use std::fmt;
 use std::fmt::Formatter;
@@ -48,6 +49,7 @@ pub struct VM<'a> {
     config: VMConfig<'a>,
     stack: [Value; STACK_MAX],
     stack_top: usize,
+    gc: &'a mut GC,
 }
 
 macro_rules! vm_print {
@@ -65,15 +67,21 @@ macro_rules! vm_print {
 }
 
 impl<'a> VM<'a> {
-    pub fn new(config: VMConfig<'a>, chunk: &'a Chunk) -> Self {
+    pub fn new(config: VMConfig<'a>, chunk: &'a Chunk, gc: &'a mut GC) -> Self {
         VM {
             chunk,
             ip: 0,
             config,
             stack: [Value::Nil; STACK_MAX],
             stack_top: 0,
+            gc,
         }
     }
+
+    pub fn with_gc<T>(&mut self, f: impl FnOnce(&mut GC) -> T) -> T {
+        f(self.gc)
+    }
+
     fn stack_push(&mut self, value: Value) -> Result<(), InterpreterError> {
         if self.stack_top == STACK_MAX {
             return Err(RuntimeError(format!("Stack overflow")));
@@ -82,6 +90,7 @@ impl<'a> VM<'a> {
         self.stack_top += 1;
         return Ok(());
     }
+
     fn stack_pop(&mut self) -> Result<Value, InterpreterError> {
         if self.stack_top == 0 {
             return Err(RuntimeError(format!("Stack underflow")));
@@ -89,6 +98,7 @@ impl<'a> VM<'a> {
         self.stack_top -= 1;
         return Ok(self.stack[self.stack_top]);
     }
+
     fn stack_pop_binary(&mut self) -> Result<(Value, Value), InterpreterError> {
         let b = self.stack_pop()?;
         let a = self.stack_pop()?;
@@ -262,14 +272,15 @@ mod tests {
     use super::*;
     use std::str;
 
-    struct StringAdapter<'a> {
+    struct StdoutAdapter<'a> {
         f: &'a mut String,
     }
 
-    impl<'a> io::Write for StringAdapter<'a> {
+    impl<'a> io::Write for StdoutAdapter<'a> {
         fn write(&mut self, b: &[u8]) -> Result<usize, io::Error> {
             use std::fmt::Write;
             let s = str::from_utf8(b).map_err(|_| io::Error::from(io::ErrorKind::Other))?;
+            print!("{}", s);
             self.f
                 .write_str(s)
                 .map_err(|_| io::Error::from(io::ErrorKind::Other))?;
@@ -281,56 +292,38 @@ mod tests {
         }
     }
 
-    struct PrintAdapter {}
-
-    impl io::Write for PrintAdapter {
-        fn write(&mut self, b: &[u8]) -> Result<usize, io::Error> {
-            let s = str::from_utf8(b).map_err(|_| io::Error::from(io::ErrorKind::Other))?;
-            print!("{}", s);
-            Ok(b.len())
-        }
-
-        fn flush(&mut self) -> Result<(), io::Error> {
-            Ok(())
-        }
+    macro_rules! run_to_string {
+        ($chunk:expr) => {{
+            let mut output = String::new();
+            let mut adapter = StdoutAdapter { f: &mut output };
+            let mut gc = GC::new();
+            let mut vm = VM::new(
+                VMConfig {
+                    trace_execution: false,
+                    stdout: &mut adapter,
+                },
+                &$chunk,
+                &mut gc,
+            );
+            let result = vm.interpret_chunk(&$chunk);
+            (result, output)
+        }};
     }
 
     #[test]
     fn return_wo_constant() {
         let mut chunk = Chunk::new();
         chunk.write_opcode(Return, 1);
-        let mut output = String::new();
-        let mut adapter = StringAdapter { f: &mut output };
-        let mut vm = VM::new(
-            VMConfig {
-                trace_execution: true,
-                stdout: &mut adapter,
-            },
-            &chunk,
-        );
-        let result = vm.interpret_chunk(&chunk);
+        let (result, output) = run_to_string!(chunk);
         assert_eq!(result, Err(RuntimeError(String::from("Stack underflow"))));
-        assert_eq!(
-            output,
-            "          \n\
-            0000    1 OP_RETURN\n"
-        );
+        assert_eq!(output, "");
     }
 
     #[test]
     fn constant_wo_return() {
         let mut chunk = Chunk::new();
         chunk.write_constant(Number(1.2), 1);
-        let mut adapter = PrintAdapter {};
-        println!("test2");
-        let mut vm = VM::new(
-            VMConfig {
-                trace_execution: true,
-                stdout: &mut adapter,
-            },
-            &chunk,
-        );
-        let result = vm.interpret_chunk(&chunk);
+        let (result, _) = run_to_string!(chunk);
         assert_eq!(
             result,
             Err(RuntimeError(String::from("Read byte out of bounds")))
@@ -343,15 +336,7 @@ mod tests {
         for i in 0..257 {
             chunk.write_constant(Number(i as f32), i);
         }
-        let mut adapter = PrintAdapter {};
-        let mut vm = VM::new(
-            VMConfig {
-                trace_execution: true,
-                stdout: &mut adapter,
-            },
-            &chunk,
-        );
-        let result = vm.interpret_chunk(&chunk);
+        let (result, _) = run_to_string!(chunk);
         assert_eq!(result, Err(RuntimeError(String::from("Stack overflow"))));
     }
 
@@ -360,32 +345,16 @@ mod tests {
         let mut chunk = Chunk::new();
         chunk.write_constant(Number(1.2), 1);
         chunk.write_opcode(Return, 2);
-        let mut adapter = PrintAdapter {};
-        let mut vm = VM::new(
-            VMConfig {
-                trace_execution: true,
-                stdout: &mut adapter,
-            },
-            &chunk,
-        );
-        let result = vm.interpret_chunk(&chunk);
+        let (result, _) = run_to_string!(chunk);
         assert_eq!(result, Ok(Number(1.2)));
     }
-    
+
     #[test]
     fn return_w_bool() {
         let mut chunk = Chunk::new();
         chunk.write_opcode(True, 1);
         chunk.write_opcode(Return, 2);
-        let mut adapter = PrintAdapter {};
-        let mut vm = VM::new(
-            VMConfig {
-                trace_execution: true,
-                stdout: &mut adapter,
-            },
-            &chunk,
-        );
-        let result = vm.interpret_chunk(&chunk);
+        let (result, _) = run_to_string!(chunk);
         assert_eq!(result, Ok(Boolean(true)));
     }
 
@@ -394,15 +363,7 @@ mod tests {
         let mut chunk = Chunk::new();
         chunk.write_opcode(OpCode::Nil, 1);
         chunk.write_opcode(Return, 2);
-        let mut adapter = PrintAdapter {};
-        let mut vm = VM::new(
-            VMConfig {
-                trace_execution: true,
-                stdout: &mut adapter,
-            },
-            &chunk,
-        );
-        let result = vm.interpret_chunk(&chunk);
+        let (result, _) = run_to_string!(chunk);
         assert_eq!(result, Ok(Nil));
     }
 
@@ -413,15 +374,7 @@ mod tests {
             chunk.write_constant(Number(i as f32), i);
         }
         chunk.write_opcode(Return, 256);
-        let mut adapter = PrintAdapter {};
-        let mut vm = VM::new(
-            VMConfig {
-                trace_execution: true,
-                stdout: &mut adapter,
-            },
-            &chunk,
-        );
-        let result = vm.interpret_chunk(&chunk);
+        let (result, _) = run_to_string!(chunk);
         assert_eq!(result, Ok(Number(255.0)));
     }
 
@@ -432,15 +385,7 @@ mod tests {
         chunk.write_constant(Number(1.0), 2);
         chunk.write_opcode(Add, 3);
         chunk.write_opcode(Return, 4);
-        let mut adapter = PrintAdapter {};
-        let mut vm = VM::new(
-            VMConfig {
-                trace_execution: true,
-                stdout: &mut adapter,
-            },
-            &chunk,
-        );
-        let result = vm.interpret_chunk(&chunk);
+        let (result, _) = run_to_string!(chunk);
         assert_eq!(result, Ok(Number(2.0)));
     }
 
@@ -451,15 +396,7 @@ mod tests {
         chunk.write_constant(Number(1.0), 2);
         chunk.write_opcode(Add, 3);
         chunk.write_opcode(Return, 4);
-        let mut adapter = PrintAdapter {};
-        let mut vm = VM::new(
-            VMConfig {
-                trace_execution: true,
-                stdout: &mut adapter,
-            },
-            &chunk,
-        );
-        let result = vm.interpret_chunk(&chunk);
+        let (result, _) = run_to_string!(chunk);
         assert_eq!(
             result,
             Err(RuntimeError(String::from(
@@ -475,15 +412,7 @@ mod tests {
         chunk.write_constant(Number(3.4), 2);
         chunk.write_opcode(Subtract, 3);
         chunk.write_opcode(Return, 4);
-        let mut adapter = PrintAdapter {};
-        let mut vm = VM::new(
-            VMConfig {
-                trace_execution: true,
-                stdout: &mut adapter,
-            },
-            &chunk,
-        );
-        let result = vm.interpret_chunk(&chunk);
+        let (result, _) = run_to_string!(chunk);
         assert_eq!(result, Ok(Number(-2.2)));
     }
 
@@ -494,15 +423,7 @@ mod tests {
         chunk.write_constant(Number(1.0), 2);
         chunk.write_opcode(Subtract, 3);
         chunk.write_opcode(Return, 4);
-        let mut adapter = PrintAdapter {};
-        let mut vm = VM::new(
-            VMConfig {
-                trace_execution: true,
-                stdout: &mut adapter,
-            },
-            &chunk,
-        );
-        let result = vm.interpret_chunk(&chunk);
+        let (result, _) = run_to_string!(chunk);
         assert_eq!(
             result,
             Err(RuntimeError(String::from(
@@ -518,15 +439,7 @@ mod tests {
         chunk.write_constant(Number(-0.5), 2);
         chunk.write_opcode(Multiply, 3);
         chunk.write_opcode(Return, 4);
-        let mut adapter = PrintAdapter {};
-        let mut vm = VM::new(
-            VMConfig {
-                trace_execution: true,
-                stdout: &mut adapter,
-            },
-            &chunk,
-        );
-        let result = vm.interpret_chunk(&chunk);
+        let (result, _) = run_to_string!(chunk);
         assert_eq!(result, Ok(Number(-1.5)));
     }
 
@@ -537,15 +450,7 @@ mod tests {
         chunk.write_constant(Number(1.0), 2);
         chunk.write_opcode(Multiply, 3);
         chunk.write_opcode(Return, 4);
-        let mut adapter = PrintAdapter {};
-        let mut vm = VM::new(
-            VMConfig {
-                trace_execution: true,
-                stdout: &mut adapter,
-            },
-            &chunk,
-        );
-        let result = vm.interpret_chunk(&chunk);
+        let (result, _) = run_to_string!(chunk);
         assert_eq!(
             result,
             Err(RuntimeError(String::from(
@@ -561,15 +466,7 @@ mod tests {
         chunk.write_constant(Number(2.0), 2);
         chunk.write_opcode(Divide, 3);
         chunk.write_opcode(Return, 4);
-        let mut adapter = PrintAdapter {};
-        let mut vm = VM::new(
-            VMConfig {
-                trace_execution: true,
-                stdout: &mut adapter,
-            },
-            &chunk,
-        );
-        let result = vm.interpret_chunk(&chunk);
+        let (result, _) = run_to_string!(chunk);
         assert_eq!(result, Ok(Number(5.0)));
     }
 
@@ -580,15 +477,7 @@ mod tests {
         chunk.write_constant(Number(1.0), 2);
         chunk.write_opcode(Divide, 3);
         chunk.write_opcode(Return, 4);
-        let mut adapter = PrintAdapter {};
-        let mut vm = VM::new(
-            VMConfig {
-                trace_execution: true,
-                stdout: &mut adapter,
-            },
-            &chunk,
-        );
-        let result = vm.interpret_chunk(&chunk);
+        let (result, _) = run_to_string!(chunk);
         assert_eq!(
             result,
             Err(RuntimeError(String::from(
@@ -603,16 +492,7 @@ mod tests {
         chunk.write_constant(Number(1.2), 1);
         chunk.write_opcode(Negate, 2);
         chunk.write_opcode(Return, 3);
-        let mut output = String::new();
-        let mut adapter = StringAdapter { f: &mut output };
-        let mut vm = VM::new(
-            VMConfig {
-                trace_execution: false,
-                stdout: &mut adapter,
-            },
-            &chunk,
-        );
-        let result = vm.interpret_chunk(&chunk);
+        let (result, output) = run_to_string!(chunk);
         assert_eq!(result, Ok(Number(-1.2)));
         assert_eq!(output, "-1.2\n");
     }
@@ -623,15 +503,7 @@ mod tests {
         chunk.write_constant(Nil, 1);
         chunk.write_opcode(Negate, 2);
         chunk.write_opcode(Return, 3);
-        let mut adapter = PrintAdapter {};
-        let mut vm = VM::new(
-            VMConfig {
-                trace_execution: false,
-                stdout: &mut adapter,
-            },
-            &chunk,
-        );
-        let result = vm.interpret_chunk(&chunk);
+        let (result, _) = run_to_string!(chunk);
         assert_eq!(
             result,
             Err(RuntimeError(String::from("Invalid type for negation: nil")))
@@ -644,16 +516,7 @@ mod tests {
         chunk.write_constant(Boolean(true), 1);
         chunk.write_opcode(Not, 2);
         chunk.write_opcode(Return, 3);
-        let mut output = String::new();
-        let mut adapter = StringAdapter { f: &mut output };
-        let mut vm = VM::new(
-            VMConfig {
-                trace_execution: false,
-                stdout: &mut adapter,
-            },
-            &chunk,
-        );
-        let result = vm.interpret_chunk(&chunk);
+        let (result, output) = run_to_string!(chunk);
         assert_eq!(result, Ok(Boolean(false)));
         assert_eq!(output, "false\n");
     }
@@ -664,57 +527,33 @@ mod tests {
         chunk.write_constant(Nil, 1);
         chunk.write_opcode(Not, 2);
         chunk.write_opcode(Return, 3);
-        let mut output = String::new();
-        let mut adapter = StringAdapter { f: &mut output };
-        let mut vm = VM::new(
-            VMConfig {
-                trace_execution: false,
-                stdout: &mut adapter,
-            },
-            &chunk,
-        );
-        let result = vm.interpret_chunk(&chunk);
+        let (result, output) = run_to_string!(chunk);
         assert_eq!(result, Ok(Boolean(true)));
         assert_eq!(output, "true\n");
     }
+
     #[test]
     fn not_zero() {
         let mut chunk = Chunk::new();
         chunk.write_constant(Number(0.0), 1);
         chunk.write_opcode(Not, 2);
         chunk.write_opcode(Return, 3);
-        let mut output = String::new();
-        let mut adapter = StringAdapter { f: &mut output };
-        let mut vm = VM::new(
-            VMConfig {
-                trace_execution: false,
-                stdout: &mut adapter,
-            },
-            &chunk,
-        );
-        let result = vm.interpret_chunk(&chunk);
+        let (result, output) = run_to_string!(chunk);
         assert_eq!(result, Ok(Boolean(false)));
         assert_eq!(output, "false\n");
     }
+
     #[test]
     fn not_one() {
         let mut chunk = Chunk::new();
         chunk.write_constant(Number(1.0), 1);
         chunk.write_opcode(Not, 2);
         chunk.write_opcode(Return, 3);
-        let mut output = String::new();
-        let mut adapter = StringAdapter { f: &mut output };
-        let mut vm = VM::new(
-            VMConfig {
-                trace_execution: false,
-                stdout: &mut adapter,
-            },
-            &chunk,
-        );
-        let result = vm.interpret_chunk(&chunk);
+        let (result, output) = run_to_string!(chunk);
         assert_eq!(result, Ok(Boolean(false)));
         assert_eq!(output, "false\n");
     }
+
     #[test]
     fn equal_true() {
         let mut chunk = Chunk::new();
@@ -722,19 +561,11 @@ mod tests {
         chunk.write_constant(Number(1.0), 2);
         chunk.write_opcode(Equal, 3);
         chunk.write_opcode(Return, 4);
-        let mut output = String::new();
-        let mut adapter = StringAdapter { f: &mut output };
-        let mut vm = VM::new(
-            VMConfig {
-                trace_execution: false,
-                stdout: &mut adapter,
-            },
-            &chunk,
-        );
-        let result = vm.interpret_chunk(&chunk);
+        let (result, output) = run_to_string!(chunk);
         assert_eq!(result, Ok(Boolean(true)));
         assert_eq!(output, "true\n");
     }
+
     #[test]
     fn equal_false() {
         let mut chunk = Chunk::new();
@@ -742,16 +573,7 @@ mod tests {
         chunk.write_constant(Number(2.0), 2);
         chunk.write_opcode(Equal, 3);
         chunk.write_opcode(Return, 4);
-        let mut output = String::new();
-        let mut adapter = StringAdapter { f: &mut output };
-        let mut vm = VM::new(
-            VMConfig {
-                trace_execution: false,
-                stdout: &mut adapter,
-            },
-            &chunk,
-        );
-        let result = vm.interpret_chunk(&chunk);
+        let (result, output) = run_to_string!(chunk);
         assert_eq!(result, Ok(Boolean(false)));
         assert_eq!(output, "false\n");
     }
@@ -763,19 +585,11 @@ mod tests {
         chunk.write_constant(Number(1.0), 1);
         chunk.write_opcode(Greater, 3);
         chunk.write_opcode(Return, 4);
-        let mut output = String::new();
-        let mut adapter = StringAdapter { f: &mut output };
-        let mut vm = VM::new(
-            VMConfig {
-                trace_execution: false,
-                stdout: &mut adapter,
-            },
-            &chunk,
-        );
-        let result = vm.interpret_chunk(&chunk);
+        let (result, output) = run_to_string!(chunk);
         assert_eq!(result, Ok(Boolean(true)));
         assert_eq!(output, "true\n");
     }
+
     #[test]
     fn greater_false() {
         let mut chunk = Chunk::new();
@@ -783,16 +597,7 @@ mod tests {
         chunk.write_constant(Number(1.0), 2);
         chunk.write_opcode(Greater, 3);
         chunk.write_opcode(Return, 4);
-        let mut output = String::new();
-        let mut adapter = StringAdapter { f: &mut output };
-        let mut vm = VM::new(
-            VMConfig {
-                trace_execution: false,
-                stdout: &mut adapter,
-            },
-            &chunk,
-        );
-        let result = vm.interpret_chunk(&chunk);
+        let (result, output) = run_to_string!(chunk);
         assert_eq!(result, Ok(Boolean(false)));
         assert_eq!(output, "false\n");
     }
@@ -804,16 +609,7 @@ mod tests {
         chunk.write_constant(Number(2.0), 2);
         chunk.write_opcode(Less, 3);
         chunk.write_opcode(Return, 4);
-        let mut output = String::new();
-        let mut adapter = StringAdapter { f: &mut output };
-        let mut vm = VM::new(
-            VMConfig {
-                trace_execution: false,
-                stdout: &mut adapter,
-            },
-            &chunk,
-        );
-        let result = vm.interpret_chunk(&chunk);
+        let (result, output) = run_to_string!(chunk);
         assert_eq!(result, Ok(Boolean(true)));
         assert_eq!(output, "true\n");
     }
@@ -825,16 +621,7 @@ mod tests {
         chunk.write_constant(Number(1.0), 2);
         chunk.write_opcode(Less, 3);
         chunk.write_opcode(Return, 4);
-        let mut output = String::new();
-        let mut adapter = StringAdapter { f: &mut output };
-        let mut vm = VM::new(
-            VMConfig {
-                trace_execution: false,
-                stdout: &mut adapter,
-            },
-            &chunk,
-        );
-        let result = vm.interpret_chunk(&chunk);
+        let (result, output) = run_to_string!(chunk);
         assert_eq!(result, Ok(Boolean(false)));
         assert_eq!(output, "false\n");
     }
@@ -849,15 +636,7 @@ mod tests {
         chunk.write_opcode(Divide, 1);
         chunk.write_opcode(Negate, 1);
         chunk.write_opcode(Return, 1);
-        let mut adapter = PrintAdapter {};
-        let mut vm = VM::new(
-            VMConfig {
-                trace_execution: true,
-                stdout: &mut adapter,
-            },
-            &chunk,
-        );
-        let result = vm.interpret_chunk(&chunk);
+        let (result, _) = run_to_string!(chunk);
         assert_eq!(result, Ok(Number(-0.82142866)));
     }
 }
