@@ -1,6 +1,6 @@
 use crate::chunk::OpCode::*;
 use crate::chunk::*;
-use crate::gc::GC;
+use crate::gc::{GCValue, GC};
 use crate::scanner::TokenKind::*;
 use crate::scanner::*;
 use crate::value::Value;
@@ -134,7 +134,7 @@ fn get_rule(token: TokenKind) -> ParseRule {
             precedence: Precedence::None,
         },
         Str => ParseRule {
-            prefix: None,
+            prefix: Some(string),
             infix: None,
             precedence: Precedence::None,
         },
@@ -399,6 +399,13 @@ fn grouping<'a>(compiler: &mut Compiler<'a>) {
     );
 }
 
+fn string<'a>(compiler: &mut Compiler<'a>) {
+    let lexeme = &compiler.previous.lexeme;
+    let value = lexeme[1..lexeme.len() - 1].to_string();
+    let obj = compiler.gc.alloc_string(value);
+    compiler.emit_constant(Value::Object(obj));
+}
+
 pub fn compile<'a>(source: &'a String, gc: &mut GC) -> Result<Chunk, InterpreterError> {
     let scanner = Scanner::new(&source);
     let mut compiler = Compiler::new(scanner, gc);
@@ -420,14 +427,14 @@ mod tests {
             let source = String::from($program);
             let result = compile(&source, &mut gc);
             println!("Compile result: {:?}", result);
-            result
+            (result, gc)
         }};
     }
     macro_rules! test_compile_ok {
         ($program:expr) => {{
-            let result = test_compile!($program);
+            let (result, gc) = test_compile!($program);
             assert!(result.is_ok());
-            result.unwrap()
+            (result.unwrap(), gc)
         }};
     }
 
@@ -440,42 +447,58 @@ mod tests {
 
     #[test]
     fn empty() {
-        let result = test_compile!("");
+        let (result, _) = test_compile!("");
         assert!(!result.is_ok());
     }
+    mod literals {
+        use super::*;
 
-    #[test]
-    fn number_literal() {
-        let chunk = test_compile_ok!("123");
-        assert_eq!(chunk.get_constant(0), Value::Number(123.0));
-        let expect_code = [Constant as u8, 0, Return as u8];
-        assert_eq!(chunk.get_code(), expect_code);
-    }
+        #[test]
+        fn number_literal() {
+            let (chunk, _) = test_compile_ok!("123");
+            assert_eq!(chunk.get_constant(0), Value::Number(123.0));
+            let expect_code = [Constant as u8, 0, Return as u8];
+            assert_eq!(chunk.get_code(), expect_code);
+        }
 
-    #[test]
-    fn true_literal() {
-        let chunk = test_compile_ok!("true");
-        let expect_code = [True as u8, Return as u8];
-        assert_eq!(chunk.get_code(), expect_code);
-    }
+        #[test]
+        fn true_literal() {
+            let (chunk, _) = test_compile_ok!("true");
+            let expect_code = [True as u8, Return as u8];
+            assert_eq!(chunk.get_code(), expect_code);
+        }
 
-    #[test]
-    fn false_literal() {
-        let chunk = test_compile_ok!("false");
-        let expect_code = [False as u8, Return as u8];
-        assert_eq!(chunk.get_code(), expect_code);
-    }
+        #[test]
+        fn false_literal() {
+            let (chunk, _) = test_compile_ok!("false");
+            let expect_code = [False as u8, Return as u8];
+            assert_eq!(chunk.get_code(), expect_code);
+        }
 
-    #[test]
-    fn nil_literal() {
-        let chunk = test_compile_ok!("nil");
-        let expect_code = [Nil as u8, Return as u8];
-        assert_eq!(chunk.get_code(), expect_code);
+        #[test]
+        fn nil_literal() {
+            let (chunk, _) = test_compile_ok!("nil");
+            let expect_code = [Nil as u8, Return as u8];
+            assert_eq!(chunk.get_code(), expect_code);
+        }
+        #[test]
+        fn string_literal() {
+            let (chunk, gc) = test_compile_ok!(r#""hello world""#);
+            let expect_code = [Constant as u8, 0, Return as u8];
+            assert_eq!(chunk.get_code(), expect_code);
+            match chunk.get_constant(0) {
+                Value::Object(o) => {
+                    assert_eq!(*o, GCValue::String("hello world".to_string()));
+                }
+                _ => panic!("Expect string object"),
+            }
+            drop(gc);
+        }
     }
 
     #[test]
     fn negate() {
-        let chunk = test_compile_ok!("-123");
+        let (chunk, _) = test_compile_ok!("-123");
         assert_eq!(chunk.get_constant(0), Value::Number(123.0));
         let expect_code = [Constant as u8, 0, Negate as u8, Return as u8];
         assert_eq!(chunk.get_code(), expect_code);
@@ -483,13 +506,14 @@ mod tests {
 
     #[test]
     fn not() {
-        let chunk = test_compile_ok!("!true");
+        let (chunk, _) = test_compile_ok!("!true");
         let expect_code = [True as u8, Not as u8, Return as u8];
         assert_eq!(chunk.get_code(), expect_code);
     }
+
     #[test]
     fn equal_equal() {
-        let chunk = test_compile_ok!("123 == 123");
+        let (chunk, _) = test_compile_ok!("123 == 123");
         assert_eq!(chunk.get_constant(0), Value::Number(123.0));
         assert_eq!(chunk.get_constant(1), Value::Number(123.0));
         let expect_code = [
@@ -502,9 +526,10 @@ mod tests {
         ];
         assert_eq!(chunk.get_code(), expect_code);
     }
+
     #[test]
     fn bang_equal() {
-        let chunk = test_compile_ok!("123 != 123");
+        let (chunk, _) = test_compile_ok!("123 != 123");
         assert_eq!(chunk.get_constant(0), Value::Number(123.0));
         assert_eq!(chunk.get_constant(1), Value::Number(123.0));
         let expect_code = [
@@ -518,9 +543,10 @@ mod tests {
         ];
         assert_eq!(chunk.get_code(), expect_code);
     }
+
     #[test]
     fn greater() {
-        let chunk = test_compile_ok!("123 > 123");
+        let (chunk, _) = test_compile_ok!("123 > 123");
         assert_eq!(chunk.get_constant(0), Value::Number(123.0));
         assert_eq!(chunk.get_constant(1), Value::Number(123.0));
         let expect_code = [
