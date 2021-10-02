@@ -1,3 +1,4 @@
+use core::fmt::{Display, Formatter, Error};
 use std::marker::PhantomData;
 use std::ops::Deref;
 use std::ptr::{null_mut, NonNull};
@@ -12,6 +13,7 @@ struct GCRefInner {
     next: *mut GCRefInner,
 }
 
+#[derive(Debug, PartialEq, PartialOrd, Copy, Clone)]
 pub struct GCRef {
     ptr: NonNull<GCRefInner>,
     _marker: PhantomData<()>,
@@ -22,6 +24,14 @@ impl Deref for GCRef {
 
     fn deref(&self) -> &GCValue {
         unsafe { &self.ptr.as_ref().value }
+    }
+}
+
+impl Display for GCRef {
+    fn fmt(&self, f: &mut Formatter) -> Result<(), Error> {
+        match self.deref() {
+            GCValue::String(s) => s.fmt(f)
+        }
     }
 }
 

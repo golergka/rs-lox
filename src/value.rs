@@ -1,11 +1,13 @@
+use crate::gc::GCRef;
 use std::fmt::{Display, Error, Formatter};
 use Value::*;
 
-#[derive(Clone, Copy, Debug, PartialEq, PartialOrd)]
+#[derive(Copy, Clone, Debug, PartialEq, PartialOrd)]
 pub enum Value {
     Nil,
     Number(f32),
     Boolean(bool),
+    Object(GCRef)
 }
 
 impl Display for Value {
@@ -14,6 +16,7 @@ impl Display for Value {
             Value::Nil => write!(f, "nil"),
             Value::Number(n) => n.fmt(f),
             Value::Boolean(b) => b.fmt(f),
+            Value::Object(o) => o.fmt(f)
         }
     }
 }
