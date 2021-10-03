@@ -63,6 +63,13 @@ impl GC {
     pub fn alloc_string(&mut self, value: String) -> GCRef {
         self.alloc_inner(GCValue::String(value))
     }
+
+    unsafe fn free_obj(&mut self, ptr: *mut GCRefInner) {
+        match &(*ptr).value {
+            GCValue::String(s) => drop(s),
+        }
+        drop(Box::from_raw(ptr))
+    }
 }
 
 impl Drop for GC {
@@ -71,10 +78,7 @@ impl Drop for GC {
         while !cur.is_null() {
             let next = unsafe { (*cur).next };
             unsafe {
-                match (*cur).value {
-                    GCValue::String(ref s) => drop(s),
-                }
-                drop(Box::from_raw(cur));
+                self.free_obj(cur);
             }
             cur = next;
         }
