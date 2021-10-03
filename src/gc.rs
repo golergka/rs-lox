@@ -1,4 +1,4 @@
-use core::fmt::{Display, Formatter, Error};
+use core::fmt::{Display, Error, Formatter};
 use std::marker::PhantomData;
 use std::ops::Deref;
 use std::ptr::{null_mut, NonNull};
@@ -15,7 +15,7 @@ struct GCRefInner {
 
 #[derive(Debug, PartialEq, PartialOrd, Copy, Clone)]
 pub struct GCRef {
-    ptr: NonNull<GCRefInner>,
+    ptr: *mut GCRefInner,
     _marker: PhantomData<()>,
 }
 
@@ -23,14 +23,19 @@ impl Deref for GCRef {
     type Target = GCValue;
 
     fn deref(&self) -> &GCValue {
-        unsafe { &self.ptr.as_ref().value }
+        unsafe {
+            match &self.ptr.as_ref() {
+                Some(inner) => &inner.value,
+                None => panic!("GCRef is null"),
+            }
+        }
     }
 }
 
 impl Display for GCRef {
     fn fmt(&self, f: &mut Formatter) -> Result<(), Error> {
         match self.deref() {
-            GCValue::String(s) => s.fmt(f)
+            GCValue::String(s) => s.fmt(f),
         }
     }
 }
@@ -45,23 +50,12 @@ impl GC {
     }
 
     fn alloc_inner(&mut self, value: GCValue) -> GCRef {
-        let inner = GCRefInner {
+        self.refs = Box::into_raw(Box::new(GCRefInner {
             value,
             next: self.refs,
-        };
-        if self.refs.is_null() {
-            self.refs = Box::into_raw(Box::new(inner));
-        } else {
-            let mut cur = self.refs;
-            unsafe {
-                while !(*cur).next.is_null() {
-                    cur = (*cur).next;
-                }
-                (*cur).next = Box::into_raw(Box::new(inner));
-            }
-        }
+        }));
         GCRef {
-            ptr: NonNull::new(self.refs).unwrap(),
+            ptr: self.refs,
             _marker: PhantomData,
         }
     }
@@ -92,10 +86,20 @@ mod test {
     use super::*;
 
     #[test]
-    fn allocates_string() {
+    fn allocates_string_drops() {
         let mut gc = GC::new();
         let s = gc.alloc_string("hello world".to_string());
         assert_eq!(*s, GCValue::String("hello world".to_string()));
+        drop(gc);
     }
 
+    #[test]
+    fn allocates_two_strings_drops() {
+        let mut gc = GC::new();
+        let s1 = gc.alloc_string("hello world".to_string());
+        let s2 = gc.alloc_string("hello world".to_string());
+        assert_eq!(*s1, GCValue::String("hello world".to_string()));
+        assert_eq!(*s2, GCValue::String("hello world".to_string()));
+        drop(gc);
+    }
 }
