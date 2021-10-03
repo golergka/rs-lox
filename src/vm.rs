@@ -1,10 +1,10 @@
 use crate::chunk::*;
 use crate::compiler::ParserError;
 use crate::debug::*;
+use crate::gc::{GCRef, GCValue, GC};
 use crate::value::{are_equal, is_falsey, Value, Value::*};
 use crate::vm::OpCode::*;
 use crate::InterpreterError::*;
-use crate::gc::{GC,GCValue};
 use num_traits::FromPrimitive;
 use std::fmt;
 use std::fmt::Formatter;
@@ -201,8 +201,13 @@ impl<'a> VM<'a> {
                 }
                 Add => {
                     let (a, b) = self.stack_pop_binary()?;
-                    if let (Number(a), Number(b)) = (a, b) {
-                        self.stack_push(Number(a + b))?;
+                    if let (Number(a_num), Number(b_num)) = (a, b) {
+                        self.stack_push(Number(a_num + b_num))?;
+                    } else if let (Object(a_obj), Object(b_obj)) = (a, b) {
+                        let (GCValue::String(a_string), GCValue::String(b_string)) =
+                            (&*a_obj, &*b_obj);
+                        let result = self.gc.alloc_string(format!("{}{}", a_string, b_string));
+                        self.stack_push(Value::Object(result))?;
                     } else {
                         return Err(RuntimeError(format!(
                             "Invalid type for addition: {} {}",
@@ -400,7 +405,7 @@ mod tests {
     }
 
     #[test]
-    fn add() {
+    fn add_numbers() {
         let mut chunk = Chunk::new();
         chunk.write_constant(Number(1.0), 1);
         chunk.write_constant(Number(1.0), 2);
@@ -411,7 +416,7 @@ mod tests {
     }
 
     #[test]
-    fn add_nil() {
+    fn add_number_nil() {
         let mut chunk = Chunk::new();
         chunk.write_constant(Nil, 1);
         chunk.write_constant(Number(1.0), 2);
@@ -425,9 +430,27 @@ mod tests {
             )))
         );
     }
+    #[test]
+    fn add_strings() {
+        let mut gc = GC::new();
+        let mut chunk = Chunk::new();
+        chunk.write_constant(Value::Object(gc.alloc_string("hello".to_string())), 1);
+        chunk.write_constant(Value::Object(gc.alloc_string("world".to_string())), 2);
+        chunk.write_opcode(Add, 3);
+        chunk.write_opcode(Return, 4);
+        println!("Running");
+        let (result, _) = run_chunk_with_gc!(chunk, gc);
+        match result {
+            Ok(Value::Object(obj)) => match &*obj {
+                GCValue::String(s) => assert_eq!(s, "helloworld"),
+            },
+            _ => panic!("Expected object"),
+        }
+        drop(gc);
+    }
 
     #[test]
-    fn subtract() {
+    fn subtract_numbers() {
         let mut chunk = Chunk::new();
         chunk.write_constant(Number(1.2), 1);
         chunk.write_constant(Number(3.4), 2);
@@ -438,7 +461,7 @@ mod tests {
     }
 
     #[test]
-    fn subtract_nil() {
+    fn subtract_number_nil() {
         let mut chunk = Chunk::new();
         chunk.write_constant(Nil, 1);
         chunk.write_constant(Number(1.0), 2);
@@ -454,7 +477,7 @@ mod tests {
     }
 
     #[test]
-    fn multiply() {
+    fn multiply_numbers() {
         let mut chunk = Chunk::new();
         chunk.write_constant(Number(3.0), 1);
         chunk.write_constant(Number(-0.5), 2);
@@ -465,7 +488,7 @@ mod tests {
     }
 
     #[test]
-    fn multiply_nil() {
+    fn multiply_number_nil() {
         let mut chunk = Chunk::new();
         chunk.write_constant(Nil, 1);
         chunk.write_constant(Number(1.0), 2);
@@ -481,7 +504,7 @@ mod tests {
     }
 
     #[test]
-    fn divide() {
+    fn divide_numbers() {
         let mut chunk = Chunk::new();
         chunk.write_constant(Number(10.0), 1);
         chunk.write_constant(Number(2.0), 2);
@@ -492,7 +515,7 @@ mod tests {
     }
 
     #[test]
-    fn divide_nil() {
+    fn divide_number_nil() {
         let mut chunk = Chunk::new();
         chunk.write_constant(Nil, 1);
         chunk.write_constant(Number(1.0), 2);
@@ -508,7 +531,7 @@ mod tests {
     }
 
     #[test]
-    fn negate() {
+    fn negate_number() {
         let mut chunk = Chunk::new();
         chunk.write_constant(Number(1.2), 1);
         chunk.write_opcode(Negate, 2);
@@ -532,7 +555,7 @@ mod tests {
     }
 
     #[test]
-    fn not() {
+    fn not_true() {
         let mut chunk = Chunk::new();
         chunk.write_constant(Boolean(true), 1);
         chunk.write_opcode(Not, 2);
