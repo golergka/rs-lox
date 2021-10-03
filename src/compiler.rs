@@ -452,6 +452,7 @@ mod tests {
     }
     mod literals {
         use super::*;
+        use crate::assert_eq_str;
 
         #[test]
         fn number_literal() {
@@ -487,9 +488,7 @@ mod tests {
             let expect_code = [Constant as u8, 0, Return as u8];
             assert_eq!(chunk.get_code(), expect_code);
             match chunk.get_constant(0) {
-                Value::Object(o) => {
-                    assert_eq!(*o, GCValue::String("hello world".to_string()));
-                }
+                Value::Object(o) => assert_eq_str!(o, "hello world"),
                 _ => panic!("Expect string object"),
             }
             drop(gc);

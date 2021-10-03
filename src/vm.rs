@@ -204,8 +204,14 @@ impl<'a> VM<'a> {
                     if let (Number(a_num), Number(b_num)) = (a, b) {
                         self.stack_push(Number(a_num + b_num))?;
                     } else if let (Object(a_obj), Object(b_obj)) = (a, b) {
-                        let (GCValue::String(a_string), GCValue::String(b_string)) =
-                            (&*a_obj, &*b_obj);
+                        let (
+                            GCValue::String {
+                                value: a_string, ..
+                            },
+                            GCValue::String {
+                                value: b_string, ..
+                            },
+                        ) = (&*a_obj, &*b_obj);
                         let result = self.gc.alloc_string(format!("{}{}", a_string, b_string));
                         self.stack_push(Value::Object(result))?;
                     } else {
@@ -274,8 +280,10 @@ impl<'a> VM<'a> {
 
 #[cfg(test)]
 mod tests {
+
     use super::*;
     use std::str;
+    use crate::assert_eq_str;
 
     struct StdoutAdapter<'a> {
         f: &'a mut String,
@@ -377,6 +385,7 @@ mod tests {
         let (result, _) = run_chunk!(chunk);
         assert_eq!(result, Ok(Nil));
     }
+
     #[test]
     fn return_w_string_literal() {
         let mut gc = GC::new();
@@ -385,10 +394,7 @@ mod tests {
         chunk.write_opcode(Return, 2);
         let (result, _) = run_chunk_with_gc!(chunk, gc);
         match result {
-            Ok(Value::Object(obj)) => match &*obj {
-                GCValue::String(s) => assert_eq!(s, "hello world"),
-                _ => panic!("Expected string"),
-            },
+            Ok(Value::Object(obj)) => assert_eq_str!(obj, "hello world"),
             _ => panic!("Expected object"),
         }
     }
@@ -441,9 +447,7 @@ mod tests {
         println!("Running");
         let (result, _) = run_chunk_with_gc!(chunk, gc);
         match result {
-            Ok(Value::Object(obj)) => match &*obj {
-                GCValue::String(s) => assert_eq!(s, "helloworld"),
-            },
+            Ok(Value::Object(obj)) => assert_eq_str!(obj, "helloworld"),
             _ => panic!("Expected object"),
         }
         drop(gc);

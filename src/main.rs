@@ -5,7 +5,9 @@ mod rle;
 mod scanner;
 mod value;
 mod vm;
+#[macro_use]
 mod gc;
+mod table;
 
 use crate::chunk::Chunk;
 use crate::compiler::compile;
