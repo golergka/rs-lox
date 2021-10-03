@@ -1,12 +1,12 @@
 use core::fmt::{Display, Error, Formatter};
 use std::marker::PhantomData;
 use std::ops::Deref;
-use std::ptr::{null_mut, NonNull};
+use std::ptr::{null_mut};
 
 #[derive(PartialEq, Debug)]
 pub struct ObjString {
     pub value: String,
-    pub hash: u32,
+    pub hash: usize,
 }
 
 impl Display for ObjString {
@@ -56,11 +56,11 @@ pub struct GC {
     refs: *mut ObjRefInner,
 }
 
-fn hash_string(s: &str) -> u32 {
+fn hash_string(s: &str) -> usize {
     // FNV-1a hash
-    let mut h = 2166136261u32;
+    let mut h = 2166136261usize;
     for c in s.as_bytes() {
-        h ^= *c as u32;
+        h ^= *c as usize;
         h = h.wrapping_mul(16777619);
     }
     return h;
