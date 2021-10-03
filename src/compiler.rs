@@ -1,6 +1,6 @@
 use crate::chunk::OpCode::*;
 use crate::chunk::*;
-use crate::gc::{GCValue, GC};
+use crate::gc::{Obj, GC};
 use crate::scanner::TokenKind::*;
 use crate::scanner::*;
 use crate::value::Value;
@@ -453,6 +453,7 @@ mod tests {
     mod literals {
         use super::*;
         use crate::assert_eq_str;
+        use crate::gc::ObjString;
 
         #[test]
         fn number_literal() {

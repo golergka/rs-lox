@@ -4,44 +4,56 @@ use std::ops::Deref;
 use std::ptr::{null_mut, NonNull};
 
 #[derive(PartialEq, Debug)]
-pub enum GCValue {
-    String { value: String, hash: u32 },
+pub struct ObjString {
+    pub value: String,
+    pub hash: u32,
 }
 
-struct GCRefInner {
-    value: GCValue,
-    next: *mut GCRefInner,
+impl Display for ObjString {
+    fn fmt(&self, f: &mut Formatter) -> Result<(), Error> {
+        write!(f, "\"{}\"", self.value)
+    }
+}
+
+#[derive(PartialEq, Debug)]
+pub enum Obj {
+    String(ObjString),
+}
+
+struct ObjRefInner {
+    value: Obj,
+    next: *mut ObjRefInner,
 }
 
 #[derive(Debug, PartialEq, PartialOrd, Copy, Clone)]
-pub struct GCRef {
-    ptr: *mut GCRefInner,
+pub struct ObjRef {
+    ptr: *mut ObjRefInner,
     _marker: PhantomData<()>,
 }
 
-impl Deref for GCRef {
-    type Target = GCValue;
+impl Deref for ObjRef {
+    type Target = Obj;
 
-    fn deref(&self) -> &GCValue {
+    fn deref(&self) -> &Obj {
         unsafe {
             match &self.ptr.as_ref() {
                 Some(inner) => &inner.value,
-                None => panic!("GCRef is null"),
+                None => panic!("ObjRef is null"),
             }
         }
     }
 }
 
-impl Display for GCRef {
+impl Display for ObjRef {
     fn fmt(&self, f: &mut Formatter) -> Result<(), Error> {
         match self.deref() {
-            GCValue::String { value, hash: _ } => value.fmt(f),
+            Obj::String(obj_string) => obj_string.fmt(f),
         }
     }
 }
 
 pub struct GC {
-    refs: *mut GCRefInner,
+    refs: *mut ObjRefInner,
 }
 
 fn hash_string(s: &str) -> u32 {
@@ -59,25 +71,25 @@ impl GC {
         GC { refs: null_mut() }
     }
 
-    fn alloc_inner(&mut self, value: GCValue) -> GCRef {
-        self.refs = Box::into_raw(Box::new(GCRefInner {
+    fn alloc_inner(&mut self, value: Obj) -> ObjRef {
+        self.refs = Box::into_raw(Box::new(ObjRefInner {
             value,
             next: self.refs,
         }));
-        GCRef {
+        ObjRef {
             ptr: self.refs,
             _marker: PhantomData,
         }
     }
 
-    pub fn alloc_string(&mut self, value: String) -> GCRef {
+    pub fn alloc_string(&mut self, value: String) -> ObjRef {
         let hash = hash_string(&value);
-        self.alloc_inner(GCValue::String { value, hash })
+        self.alloc_inner(Obj::String (ObjString{ value, hash }))
     }
 
-    unsafe fn free_obj(&mut self, ptr: *mut GCRefInner) {
+    unsafe fn free_obj(&mut self, ptr: *mut ObjRefInner) {
         match &(*ptr).value {
-            GCValue::String { value, hash: _ } => drop(value),
+            Obj::String (ObjString{ value, hash: _ }) => drop(value),
         }
         drop(Box::from_raw(ptr))
     }
@@ -100,7 +112,7 @@ impl Drop for GC {
 macro_rules! assert_eq_str {
     ($ref: expr, $str: expr) => {
         match &*$ref {
-            GCValue::String { value, hash: _ } => assert_eq!(value, &$str.to_string()),
+            Obj::String (ObjString{ value, hash: _ }) => assert_eq!(value, &$str.to_string()),
             _ => panic!("Expected string"),
         }
     };
@@ -108,8 +120,10 @@ macro_rules! assert_eq_str {
 
 #[cfg(test)]
 mod test {
+
     #[macro_use]
     use super::*;
+
     #[test]
     fn allocates_string_drops() {
         let mut gc = GC::new();

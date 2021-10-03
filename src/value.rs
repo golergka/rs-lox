@@ -1,4 +1,4 @@
-use crate::gc::GCRef;
+use crate::gc::ObjRef;
 use std::fmt::{Display, Error, Formatter};
 use Value::*;
 
@@ -7,7 +7,7 @@ pub enum Value {
     Nil,
     Number(f32),
     Boolean(bool),
-    Object(GCRef)
+    Object(ObjRef)
 }
 
 impl Display for Value {

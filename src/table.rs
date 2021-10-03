@@ -1,7 +1,7 @@
 use crate::value::Value;
+use crate::gc::Obj;
 
 struct Entry {
-    key: *const String,
     value: Value,
 }
 

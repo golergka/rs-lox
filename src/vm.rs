@@ -1,7 +1,7 @@
 use crate::chunk::*;
 use crate::compiler::ParserError;
 use crate::debug::*;
-use crate::gc::{GCRef, GCValue, GC};
+use crate::gc::{Obj, GC, ObjString};
 use crate::value::{are_equal, is_falsey, Value, Value::*};
 use crate::vm::OpCode::*;
 use crate::InterpreterError::*;
@@ -205,12 +205,12 @@ impl<'a> VM<'a> {
                         self.stack_push(Number(a_num + b_num))?;
                     } else if let (Object(a_obj), Object(b_obj)) = (a, b) {
                         let (
-                            GCValue::String {
+                            Obj::String (ObjString {
                                 value: a_string, ..
-                            },
-                            GCValue::String {
+                            }),
+                            Obj::String (ObjString{
                                 value: b_string, ..
-                            },
+                            }),
                         ) = (&*a_obj, &*b_obj);
                         let result = self.gc.alloc_string(format!("{}{}", a_string, b_string));
                         self.stack_push(Value::Object(result))?;
