@@ -33,6 +33,15 @@ pub enum Obj {
     String(ObjString),
 }
 
+impl Obj {
+    pub fn unwrap_string(&self) -> &ObjString {
+        match self {
+            Obj::String(s) => s,
+            _ => panic!("Expected Obj::String"),
+        }
+    }
+}
+
 struct ObjRefInner {
     value: Obj,
     next: *mut ObjRefInner,

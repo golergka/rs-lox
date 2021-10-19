@@ -33,7 +33,11 @@ unsafe fn free_entries(ptr: *mut Entry, cap: usize) {
 }
 
 fn grow_capacity(cap: usize) -> usize {
-    if cap < 8 { 8 } else { cap * 2 }
+    if cap < 8 {
+        8
+    } else {
+        cap * 2
+    }
 }
 
 impl Table {
@@ -92,7 +96,7 @@ impl Table {
 
     /// Sets the value of the key in the table. Returns true if the key was
     /// *not* already present in the table.
-    /// 
+    ///
     /// Please note that keys are compared using **pointer equality**.
     pub fn set(&mut self, key: &ObjString, value: Value) -> bool {
         if self.len + 1 > (self.cap as f64 * TABLE_MAX_LOAD) as usize {
@@ -106,6 +110,9 @@ impl Table {
             (*entry).key = key;
             (*entry).value = value;
             (*entry).value = value;
+            if is_new_key {
+                self.len += 1;
+            }
             return is_new_key;
         }
     }
@@ -119,19 +126,42 @@ impl Drop for Table {
 
 #[cfg(test)]
 mod tests {
+    use crate::GC;
     use super::*;
 
     #[test]
-    fn test_table_set() {
+    fn test_simple_set() {
         let mut table = Table::new();
-        let foo = ObjString::new("foo".to_string());
-        assert!(table.set(&foo, Value::Nil));
-        assert!(!table.set(&foo, Value::Nil));
-        let bar = ObjString::new("bar".to_string());
-        assert!(table.set(&bar, Value::Nil));
-        assert!(!table.set(&bar, Value::Nil));
-        let baz = ObjString::new("baz".to_string());
-        assert!(table.set(&baz, Value::Nil));
-        assert!(!table.set(&baz, Value::Nil));
+        let mut gc = GC::new();
+
+        let foo_ref = gc.alloc_string("foo".to_string());
+        let foo = &(&*foo_ref).unwrap_string();
+        assert!(table.set(foo, Value::Nil));
+        assert!(!table.set(foo, Value::Nil));
+        
+        let bar_ref = gc.alloc_string("bar".to_string());
+        let bar = &(&*bar_ref).unwrap_string();
+        assert!(table.set(bar, Value::Nil));
+        assert!(!table.set(bar, Value::Nil));
+
+        let baz_ref = gc.alloc_string("baz".to_string());
+        let baz = &(&*baz_ref).unwrap_string();
+        assert!(table.set(baz, Value::Nil));
+        assert!(!table.set(baz, Value::Nil));
+    }
+
+    #[test]
+    fn test_setting_256_values() {
+        let mut gc = GC::new();
+        // We need to use a large number of keys to trigger the capacity
+        // adjustment at least a few times.
+        let mut table = Table::new();
+        for i in 0..256 {
+            let key_ref = gc.alloc_string(format!("key_{}", i));
+            let key = &(&*key_ref).unwrap_string();
+            println!("Setting key {:?} at address {:p}", key, &key);
+            assert!(table.set(key, Value::Nil));
+            assert!(!table.set(key, Value::Nil));
+        }
     }
 }
