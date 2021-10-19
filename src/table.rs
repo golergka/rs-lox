@@ -17,12 +17,23 @@ pub struct Table {
 
 const TABLE_MAX_LOAD: f64 = 0.75;
 
+fn is_entry_empty(entry: &Entry) -> bool {
+    if !entry.key.is_null() {
+        return false;
+    }
+    match entry.value {
+        Value::Boolean(true) => false,
+        // Tombstone
+        _ => true,
+    }
+}
+
 /// Finds an entry by the key. Panics if cap is 0.
 unsafe fn find_entry(ptr: *mut Entry, cap: usize, key: *const ObjString) -> *mut Entry {
     let mut index = (*key).get_hash() % cap;
     loop {
         let entry = ptr.offset(index as isize);
-        if (*entry).key == key || (*entry).key.is_null() {
+        if (*entry).key == key || is_entry_empty(&*entry) {
             return entry;
         }
         index = (index + 1) % cap;
@@ -117,7 +128,9 @@ impl Table {
             return is_new_key;
         }
     }
-    
+    /// Returns the value of the key in the table.
+    ///
+    /// Please note that keys are compared using **pointer equality**.
     pub fn get(&self, key: &ObjString) -> Option<&Value> {
         if self.len == 0 {
             return None;
@@ -130,6 +143,27 @@ impl Table {
             return Some(&(*entry).value);
         }
     }
+    /// Delete the key from the table. Returns true if the key was present in
+    /// the table.
+    ///
+    /// Please note that keys are compared using **pointer equality**.
+    pub fn delete(&mut self, key: &ObjString) -> bool {
+        if self.len == 0 {
+            return false;
+        }
+        unsafe {
+            // Find the entry
+            let entry = find_entry(self.ptr, self.cap, key);
+            if (*entry).key.is_null() {
+                return false;
+            }
+            // Place a tombstone in the entry
+            (*entry).key = null_mut();
+            (*entry).value = Value::Boolean(true);
+            self.len -= 1;
+            return true;
+        }
+    }
 }
 
 impl Drop for Table {
@@ -140,8 +174,8 @@ impl Drop for Table {
 
 #[cfg(test)]
 mod tests {
-    use crate::GC;
     use super::*;
+    use crate::GC;
 
     #[test]
     fn test_simple_set() {
@@ -152,7 +186,6 @@ mod tests {
         let foo = &(&*foo_ref).unwrap_string();
         assert!(table.set(foo, Value::Nil));
         assert!(!table.set(foo, Value::Nil));
-        
         let bar_ref = gc.alloc_string("bar".to_string());
         let bar = &(&*bar_ref).unwrap_string();
         assert!(table.set(bar, Value::Nil));
@@ -178,7 +211,7 @@ mod tests {
             assert!(!table.set(key, Value::Nil));
         }
     }
-    
+
     #[test]
     fn test_set_get() {
         let mut table = Table::new();
@@ -190,10 +223,10 @@ mod tests {
         assert!(table.set(foo, Value::Nil));
         assert_eq!(table.get(foo), Some(&Value::Nil));
     }
-    
+
     #[test]
     fn test_empty_get() {
-        let mut table = Table::new();
+        let table = Table::new();
         let mut gc = GC::new();
 
         let foo_ref = gc.alloc_string("foo".to_string());
@@ -201,7 +234,7 @@ mod tests {
 
         assert_eq!(table.get(foo), None);
     }
-    
+
     #[test]
     fn test_wrong_get() {
         let mut table = Table::new();
@@ -217,7 +250,7 @@ mod tests {
 
         assert_eq!(table.get(bar), None);
     }
-    
+
     #[test]
     fn test_getting_256_values() {
         let mut gc = GC::new();
@@ -233,6 +266,106 @@ mod tests {
 
             println!("Getting key {:?} at address {:p}", key, &key);
             assert_eq!(table.get(key), Some(&Value::Nil));
+        }
+    }
+
+    #[test]
+    fn test_set_delete() {
+        let mut table = Table::new();
+        let mut gc = GC::new();
+
+        let foo_ref = gc.alloc_string("foo".to_string());
+        let foo = &(&*foo_ref).unwrap_string();
+
+        assert!(table.set(foo, Value::Nil));
+        assert!(!table.set(foo, Value::Nil));
+        assert!(table.delete(foo));
+        assert!(!table.delete(foo));
+        assert_eq!(table.get(foo), None);
+    }
+
+    #[test]
+    fn test_empty_delete() {
+        let mut table = Table::new();
+        let mut gc = GC::new();
+
+        let foo_ref = gc.alloc_string("foo".to_string());
+        let foo = &(&*foo_ref).unwrap_string();
+
+        assert!(!table.delete(foo));
+    }
+
+    #[test]
+    fn test_delete_wrong() {
+        let mut table = Table::new();
+        let mut gc = GC::new();
+
+        let foo_ref = gc.alloc_string("foo".to_string());
+        let foo = &(&*foo_ref).unwrap_string();
+
+        assert!(table.set(foo, Value::Nil));
+        let bar_ref = gc.alloc_string("bar".to_string());
+        let bar = &(&*bar_ref).unwrap_string();
+
+        assert!(!table.delete(bar));
+        assert_eq!(table.get(foo), Some(&Value::Nil));
+    }
+
+    #[test]
+    fn test_delete_256_values() {
+        let mut gc = GC::new();
+        // We need to use a large number of keys to trigger the capacity
+        // adjustment at least a few times.
+        let mut table = Table::new();
+        let key_refs = (0..256)
+            .map(|i| gc.alloc_string(format!("key_{}", i)))
+            .collect::<Vec<_>>();
+        for key_ref in &key_refs {
+            let key = &(&*key_ref).unwrap_string();
+            println!("Setting key {:?} at address {:p}", key, &key);
+            assert!(table.set(key, Value::Nil));
+            assert!(!table.set(key, Value::Nil));
+        }
+        for key_ref in &key_refs {
+            let key = &(&*key_ref).unwrap_string();
+            println!("Deleting key {:?} at address {:p}", key, &key);
+            assert!(table.delete(key));
+            assert_eq!(table.get(key), None);
+        }
+    }
+
+    #[test]
+    fn test_delete_half_values() {
+        let mut gc = GC::new();
+        // We need to use a large number of keys to trigger the capacity
+        // adjustment at least a few times.
+        let mut table = Table::new();
+        let deleted_key_refs = (0..255)
+            .map(|i| gc.alloc_string(format!("key_{}", i)))
+            .collect::<Vec<_>>();
+        let spared_key_refs = (256..512)
+            .map(|i| gc.alloc_string(format!("key_{}", i)))
+            .collect::<Vec<_>>();
+        let all_key_refs = deleted_key_refs.iter().chain(&spared_key_refs);
+        for key_ref in all_key_refs {
+            let key = &(&*key_ref).unwrap_string();
+            println!("Setting key {:?} at address {:p}", key, &key);
+            assert!(table.set(key, Value::Nil));
+            assert!(!table.set(key, Value::Nil));
+        }
+        for deleted_key_ref in &deleted_key_refs {
+            let deleted_key = &(&*deleted_key_ref).unwrap_string();
+            println!(
+                "Deleting key {:?} at address {:p}",
+                deleted_key, &deleted_key
+            );
+            assert!(table.delete(deleted_key));
+            assert_eq!(table.get(deleted_key), None);
+        }
+        for spared_key_ref in &spared_key_refs {
+            let spared_key = &(&*spared_key_ref).unwrap_string();
+            println!("Getting key {:?} at address {:p}", spared_key, &spared_key);
+            assert_eq!(table.get(spared_key), Some(&Value::Nil));
         }
     }
 }
