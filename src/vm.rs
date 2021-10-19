@@ -1,7 +1,7 @@
 use crate::chunk::*;
 use crate::compiler::ParserError;
 use crate::debug::*;
-use crate::gc::{Obj, GC, ObjString};
+use crate::gc::{Obj, ObjString, GC};
 use crate::value::{are_equal, is_falsey, Value, Value::*};
 use crate::vm::OpCode::*;
 use crate::InterpreterError::*;
@@ -204,15 +204,12 @@ impl<'a> VM<'a> {
                     if let (Number(a_num), Number(b_num)) = (a, b) {
                         self.stack_push(Number(a_num + b_num))?;
                     } else if let (Object(a_obj), Object(b_obj)) = (a, b) {
-                        let (
-                            Obj::String (ObjString {
-                                value: a_string, ..
-                            }),
-                            Obj::String (ObjString{
-                                value: b_string, ..
-                            }),
-                        ) = (&*a_obj, &*b_obj);
-                        let result = self.gc.alloc_string(format!("{}{}", a_string, b_string));
+                        let (Obj::String(a_string), Obj::String(b_string)) = (&*a_obj, &*b_obj);
+                        let result = self.gc.alloc_string(format!(
+                            "{}{}",
+                            a_string.get_value(),
+                            b_string.get_value()
+                        ));
                         self.stack_push(Value::Object(result))?;
                     } else {
                         return Err(RuntimeError(format!(
@@ -282,8 +279,8 @@ impl<'a> VM<'a> {
 mod tests {
 
     use super::*;
-    use std::str;
     use crate::assert_eq_str;
+    use std::str;
 
     struct StdoutAdapter<'a> {
         f: &'a mut String,

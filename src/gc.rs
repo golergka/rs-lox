@@ -1,12 +1,25 @@
 use core::fmt::{Display, Error, Formatter};
 use std::marker::PhantomData;
 use std::ops::Deref;
-use std::ptr::{null_mut};
+use std::ptr::null_mut;
 
 #[derive(PartialEq, Debug)]
 pub struct ObjString {
-    pub value: String,
-    pub hash: usize,
+    value: String,
+    hash: usize,
+}
+
+impl ObjString {
+    pub fn new(value: String) -> ObjString {
+        let hash = hash_string(&value);
+        ObjString { value, hash }
+    }
+    pub fn get_value(&self) -> &String {
+        &self.value
+    }
+    pub fn get_hash(&self) -> usize {
+        self.hash
+    }
 }
 
 impl Display for ObjString {
@@ -83,13 +96,12 @@ impl GC {
     }
 
     pub fn alloc_string(&mut self, value: String) -> ObjRef {
-        let hash = hash_string(&value);
-        self.alloc_inner(Obj::String (ObjString{ value, hash }))
+        self.alloc_inner(Obj::String(ObjString::new(value)))
     }
 
     unsafe fn free_obj(&mut self, ptr: *mut ObjRefInner) {
         match &(*ptr).value {
-            Obj::String (ObjString{ value, hash: _ }) => drop(value),
+            Obj::String(ObjString { value, hash: _ }) => drop(value),
         }
         drop(Box::from_raw(ptr))
     }
@@ -112,7 +124,7 @@ impl Drop for GC {
 macro_rules! assert_eq_str {
     ($ref: expr, $str: expr) => {
         match &*$ref {
-            Obj::String (ObjString{ value, hash: _ }) => assert_eq!(value, &$str.to_string()),
+            Obj::String(obj_string) => assert_eq!(obj_string.get_value(), &$str.to_string()),
             _ => panic!("Expected string"),
         }
     };

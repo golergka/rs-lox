@@ -3,6 +3,7 @@ use crate::value::Value;
 use std::alloc::{self, dealloc, Layout};
 use std::ptr::{self, null_mut};
 
+#[derive(Debug)]
 struct Entry {
     key: *const ObjString,
     value: Value,
@@ -17,7 +18,7 @@ pub struct Table {
 const TABLE_MAX_LOAD: f64 = 0.75;
 
 unsafe fn find_entry(ptr: *mut Entry, cap: usize, key: *const ObjString) -> *mut Entry {
-    let mut index = (*key).hash % cap;
+    let mut index = (*key).get_hash() % cap;
     loop {
         let entry = ptr.offset(index as isize);
         if (*entry).key == key || (*entry).key.is_null() {
@@ -29,6 +30,10 @@ unsafe fn find_entry(ptr: *mut Entry, cap: usize, key: *const ObjString) -> *mut
 
 unsafe fn free_entries(ptr: *mut Entry, cap: usize) {
     dealloc(ptr as *mut u8, Layout::array::<Entry>(cap).unwrap())
+}
+
+fn grow_capacity(cap: usize) -> usize {
+    if cap < 8 { 8 } else { cap * 2 }
 }
 
 impl Table {
@@ -43,7 +48,9 @@ impl Table {
     unsafe fn adjust_capacity(&mut self, new_cap: usize) {
         assert!(
             new_cap > self.cap,
-            "new_cap must be greater than current capacity"
+            "new_cap {} must be greater than current capacity {}",
+            new_cap,
+            self.cap
         );
 
         // Allocate new entries
@@ -83,10 +90,14 @@ impl Table {
         self.cap = new_cap;
     }
 
+    /// Sets the value of the key in the table. Returns true if the key was
+    /// *not* already present in the table.
+    /// 
+    /// Please note that keys are compared using **pointer equality**.
     pub fn set(&mut self, key: &ObjString, value: Value) -> bool {
         if self.len + 1 > (self.cap as f64 * TABLE_MAX_LOAD) as usize {
             unsafe {
-                self.adjust_capacity(self.cap * 2);
+                self.adjust_capacity(grow_capacity(self.cap));
             }
         }
         unsafe {
@@ -103,5 +114,24 @@ impl Table {
 impl Drop for Table {
     fn drop(&mut self) {
         unsafe { free_entries(self.ptr, self.cap) };
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_table_set() {
+        let mut table = Table::new();
+        let foo = ObjString::new("foo".to_string());
+        assert!(table.set(&foo, Value::Nil));
+        assert!(!table.set(&foo, Value::Nil));
+        let bar = ObjString::new("bar".to_string());
+        assert!(table.set(&bar, Value::Nil));
+        assert!(!table.set(&bar, Value::Nil));
+        let baz = ObjString::new("baz".to_string());
+        assert!(table.set(&baz, Value::Nil));
+        assert!(!table.set(&baz, Value::Nil));
     }
 }
