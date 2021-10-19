@@ -17,6 +17,7 @@ pub struct Table {
 
 const TABLE_MAX_LOAD: f64 = 0.75;
 
+/// Finds an entry by the key. Panics if cap is 0.
 unsafe fn find_entry(ptr: *mut Entry, cap: usize, key: *const ObjString) -> *mut Entry {
     let mut index = (*key).get_hash() % cap;
     loop {
@@ -116,6 +117,19 @@ impl Table {
             return is_new_key;
         }
     }
+    
+    pub fn get(&self, key: &ObjString) -> Option<&Value> {
+        if self.len == 0 {
+            return None;
+        }
+        unsafe {
+            let entry = find_entry(self.ptr, self.cap, key);
+            if (*entry).key.is_null() {
+                return None;
+            }
+            return Some(&(*entry).value);
+        }
+    }
 }
 
 impl Drop for Table {
@@ -162,6 +176,63 @@ mod tests {
             println!("Setting key {:?} at address {:p}", key, &key);
             assert!(table.set(key, Value::Nil));
             assert!(!table.set(key, Value::Nil));
+        }
+    }
+    
+    #[test]
+    fn test_set_get() {
+        let mut table = Table::new();
+        let mut gc = GC::new();
+
+        let foo_ref = gc.alloc_string("foo".to_string());
+        let foo = &(&*foo_ref).unwrap_string();
+
+        assert!(table.set(foo, Value::Nil));
+        assert_eq!(table.get(foo), Some(&Value::Nil));
+    }
+    
+    #[test]
+    fn test_empty_get() {
+        let mut table = Table::new();
+        let mut gc = GC::new();
+
+        let foo_ref = gc.alloc_string("foo".to_string());
+        let foo = &(&*foo_ref).unwrap_string();
+
+        assert_eq!(table.get(foo), None);
+    }
+    
+    #[test]
+    fn test_wrong_get() {
+        let mut table = Table::new();
+        let mut gc = GC::new();
+
+        let foo_ref = gc.alloc_string("foo".to_string());
+        let foo = &(&*foo_ref).unwrap_string();
+
+        assert!(table.set(foo, Value::Nil));
+
+        let bar_ref = gc.alloc_string("bar".to_string());
+        let bar = &(&*bar_ref).unwrap_string();
+
+        assert_eq!(table.get(bar), None);
+    }
+    
+    #[test]
+    fn test_getting_256_values() {
+        let mut gc = GC::new();
+        // We need to use a large number of keys to trigger the capacity
+        // adjustment at least a few times.
+        let mut table = Table::new();
+        for i in 0..256 {
+            let key_ref = gc.alloc_string(format!("key_{}", i));
+            let key = &(&*key_ref).unwrap_string();
+            println!("Setting key {:?} at address {:p}", key, &key);
+            assert!(table.set(key, Value::Nil));
+            assert!(!table.set(key, Value::Nil));
+
+            println!("Getting key {:?} at address {:p}", key, &key);
+            assert_eq!(table.get(key), Some(&Value::Nil));
         }
     }
 }
