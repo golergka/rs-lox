@@ -29,19 +29,32 @@ fn is_entry_empty(entry: &Entry) -> bool {
     }
 }
 
-/// Finds an entry by the key, returns the index of the entry and a bool that
-/// indicates whether the entry was found. If the entry was not found, the
-/// index is the index where the entry should be inserted.
+#[derive(PartialEq, Eq, Hash, Debug)]
+enum FindEntryResult {
+    KeyMatch,
+    EmptyBucket,
+    Tombstone,
+}
+
+/// Finds an entry by the key, returns it and the kind of entry found:
+///
+/// * KeyMatch — existing entry with the same key
+/// * EmptyBucket — empty bucket
+/// * Tombstone — tombstone
 ///
 /// Panics if cap is 0. Will not halt if the table is full.
-unsafe fn find_entry(ptr: *mut Entry, cap: usize, key: *const ObjString) -> (*mut Entry, bool) {
+unsafe fn find_entry(
+    ptr: *mut Entry,
+    cap: usize,
+    key: *const ObjString,
+) -> (*mut Entry, FindEntryResult) {
     let mut index = (*key).get_hash() as usize % cap;
     let mut tombstone: *mut Entry = null_mut();
     loop {
         let entry = ptr.offset(index as isize);
         if (*entry).key == key {
             // We found the key.
-            return (entry, false);
+            return (entry, FindEntryResult::KeyMatch);
         } else if (&*entry).key.is_null() {
             // We found an empty entry or a tombstone.
             match (&*entry).value {
@@ -53,14 +66,11 @@ unsafe fn find_entry(ptr: *mut Entry, cap: usize, key: *const ObjString) -> (*mu
                 }
                 // Empty entry.
                 Value::Nil => {
-                    return (
-                        if tombstone.is_null() {
-                            entry
-                        } else {
-                            tombstone
-                        },
-                        true,
-                    )
+                    return if tombstone.is_null() {
+                        (entry, FindEntryResult::EmptyBucket)
+                    } else {
+                        (tombstone, FindEntryResult::Tombstone)
+                    }
                 }
                 // We found a non-empty entry.
                 _ => panic!("Unexpected value in table"),
@@ -128,6 +138,7 @@ impl Table {
             });
         }
 
+        self.len = 0;
         // Copy old entries to new entries
         for i in 0..self.cap {
             let entry = self.ptr.offset(i as isize);
@@ -137,6 +148,7 @@ impl Table {
             let (dest, _) = find_entry(new_ptr, new_cap, (*entry).key);
             (*dest).key = (*entry).key;
             (*dest).value = (*entry).value;
+            self.len += 1;
         }
 
         // Free old entries
@@ -158,13 +170,17 @@ impl Table {
             }
         }
         unsafe {
-            let (mut entry, is_new_key) = find_entry(self.ptr, self.cap, key);
+            let (mut entry, find_result) = find_entry(self.ptr, self.cap, key);
             (*entry).key = key;
             (*entry).value = value;
-            if is_new_key {
-                self.len += 1;
-            }
-            return is_new_key;
+            return match find_result {
+                FindEntryResult::EmptyBucket => {
+                    self.len += 1;
+                    true
+                }
+                FindEntryResult::KeyMatch => false,
+                FindEntryResult::Tombstone => true
+            };
         }
     }
 
@@ -176,17 +192,12 @@ impl Table {
             return None;
         }
         unsafe {
-            let (entry, is_new_key) = find_entry(self.ptr, self.cap, key);
-            return if is_new_key {
-                None
-            } else {
-                Some(&(*entry).value)
+            let (entry, find_result) = find_entry(self.ptr, self.cap, key);
+            return match find_result {
+                FindEntryResult::KeyMatch => Some(&(*entry).value),
+                _ => None,
             };
         }
-    }
-
-    pub fn len(&self) -> usize {
-        self.len
     }
 
     /// Delete the key from the table. Returns true if the key was present in
@@ -199,14 +210,13 @@ impl Table {
         }
         unsafe {
             // Find the entry
-            let (entry, is_new_key) = find_entry(self.ptr, self.cap, key);
-            if is_new_key {
+            let (entry, find_result) = find_entry(self.ptr, self.cap, key);
+            if find_result != FindEntryResult::KeyMatch {
                 return false;
             }
             // Place a tombstone in the entry
             (*entry).key = null_mut();
             (*entry).value = Value::Boolean(true);
-            self.len -= 1;
             return true;
         }
     }
@@ -227,25 +237,21 @@ mod tests {
     fn test_simple_set() {
         let mut table = Table::new();
         let mut gc = GC::new();
-        assert_eq!(table.len(), 0);
 
         let foo_ref = gc.alloc_string("foo".to_string());
         let foo = &(&*foo_ref).unwrap_string();
         assert!(table.set(foo, Value::Nil));
         assert!(!table.set(foo, Value::Nil));
-        assert_eq!(table.len(), 1);
 
         let bar_ref = gc.alloc_string("bar".to_string());
         let bar = &(&*bar_ref).unwrap_string();
         assert!(table.set(bar, Value::Nil));
         assert!(!table.set(bar, Value::Nil));
-        assert_eq!(table.len(), 2);
 
         let baz_ref = gc.alloc_string("baz".to_string());
         let baz = &(&*baz_ref).unwrap_string();
         assert!(table.set(baz, Value::Nil));
         assert!(!table.set(baz, Value::Nil));
-        assert_eq!(table.len(), 3);
     }
 
     #[test]
@@ -260,7 +266,6 @@ mod tests {
             println!("Setting key {:?} at address {:p}", key, &key);
             assert!(table.set(key, Value::Number(i as f32)));
             assert!(!table.set(key, Value::Nil));
-            assert_eq!(table.len(), i + 1);
         }
     }
 
@@ -334,7 +339,6 @@ mod tests {
         assert!(table.delete(foo));
         assert!(!table.delete(foo));
         assert_eq!(table.get(foo), None);
-        assert_eq!(table.len(), 0);
     }
 
     #[test]
@@ -346,7 +350,6 @@ mod tests {
         let foo = &(&*foo_ref).unwrap_string();
 
         assert!(!table.delete(foo));
-        assert_eq!(table.len(), 0);
     }
 
     #[test]
@@ -363,7 +366,6 @@ mod tests {
 
         assert!(!table.delete(bar));
         assert_eq!(table.get(foo), Some(&Value::Nil));
-        assert_eq!(table.len(), 1);
     }
 
     #[test]
@@ -389,7 +391,6 @@ mod tests {
             println!("Deleting key {:?} at address {:p}", key, &key);
             assert!(table.delete(key));
             assert_eq!(table.get(key), None);
-            assert_eq!(table.len(), key_refs.len() - i - 1);
         }
     }
 
@@ -421,7 +422,6 @@ mod tests {
             println!("Deleting key {:?} at address {:p}", key, &key);
             assert!(table.delete(key));
             assert_eq!(table.get(key), None);
-            assert_eq!(table.len(), all_key_refs.len() - i - 1);
         }
         for spared_key_ref in &spared_key_refs {
             let spared_key = &(&*spared_key_ref).unwrap_string();
@@ -454,7 +454,6 @@ mod tests {
             println!("Deleting key {:?} at address {:p}", key, &key);
             assert!(table.delete(key));
             assert_eq!(table.get(key), None);
-            assert_eq!(table.len(), first_key_refs.len() - i - 1);
         }
 
         println!("Table after deleting all the keys:\n{:?}", table);
@@ -471,7 +470,6 @@ mod tests {
             println!("Setting key {:?} at address {:p}", key, &key);
             assert!(table.set(key, Value::Nil));
             assert!(!table.set(key, Value::Number(i as f32)));
-            assert_eq!(table.len(), i + 1);
         }
 
         println!(
