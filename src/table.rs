@@ -43,7 +43,7 @@ enum FindEntryResult {
 /// * Tombstone — tombstone
 ///
 /// Panics if cap is 0. Will not halt if the table is full.
-unsafe fn find_entry(
+unsafe fn get_entry(
     ptr: *mut Entry,
     cap: usize,
     key: *const ObjString,
@@ -145,7 +145,7 @@ impl Table {
             if (*entry).key.is_null() {
                 continue;
             }
-            let (dest, _) = find_entry(new_ptr, new_cap, (*entry).key);
+            let (dest, _) = get_entry(new_ptr, new_cap, (*entry).key);
             (*dest).key = (*entry).key;
             (*dest).value = (*entry).value;
             self.len += 1;
@@ -170,7 +170,7 @@ impl Table {
             }
         }
         unsafe {
-            let (mut entry, find_result) = find_entry(self.ptr, self.cap, key);
+            let (mut entry, find_result) = get_entry(self.ptr, self.cap, key);
             (*entry).key = key;
             (*entry).value = value;
             return match find_result {
@@ -179,7 +179,7 @@ impl Table {
                     true
                 }
                 FindEntryResult::KeyMatch => false,
-                FindEntryResult::Tombstone => true
+                FindEntryResult::Tombstone => true,
             };
         }
     }
@@ -192,11 +192,33 @@ impl Table {
             return None;
         }
         unsafe {
-            let (entry, find_result) = find_entry(self.ptr, self.cap, key);
+            let (entry, find_result) = get_entry(self.ptr, self.cap, key);
             return match find_result {
                 FindEntryResult::KeyMatch => Some(&(*entry).value),
                 _ => None,
             };
+        }
+    }
+    /// Returns the value of the key in the table.
+    ///
+    /// Please note that the keys are compared using **string equality**.
+    pub fn find(&self, key: &ObjString) -> Option<&Value> {
+        if self.len == 0 {
+            return None;
+        }
+        let mut index = (*key).get_hash() as usize % self.cap;
+        loop {
+            unsafe {
+                let entry = self.ptr.offset(index as isize);
+                if (*entry).key.is_null() {
+                    if (&*entry).value == Value::Nil {
+                        return None;
+                    }
+                } else if (*(*entry).key) == *key {
+                    return Some(&(*entry).value);
+                }
+            }
+            index = (index + 1) % self.cap;
         }
     }
 
@@ -210,7 +232,7 @@ impl Table {
         }
         unsafe {
             // Find the entry
-            let (entry, find_result) = find_entry(self.ptr, self.cap, key);
+            let (entry, find_result) = get_entry(self.ptr, self.cap, key);
             if find_result != FindEntryResult::KeyMatch {
                 return false;
             }
@@ -429,6 +451,7 @@ mod tests {
             assert_eq!(table.get(spared_key), Some(&Value::Nil));
         }
     }
+
     #[test]
     fn test_delete_8_values_then_add_16() {
         let mut gc = GC::new();
@@ -483,6 +506,55 @@ mod tests {
             let key = (&*key_ref).unwrap_string();
             println!("Getting key {:?} at address {:p}", key, key);
             assert_eq!(table.get(key), Some(&Value::Number(i as f32)));
+        }
+    }
+    
+    #[test]
+    fn test_set_find() {
+        // Find uses string equality, so we don't need to use GC
+        let mut table = Table::new();
+        
+        let foo = ObjString::new("foo".to_string());
+        assert!(table.set(&foo, Value::Nil));
+        let foo_2 = ObjString::new("foo".to_string());
+        assert_eq!(table.find(&foo_2), Some(&Value::Nil));
+    }
+    
+    #[test]
+    fn test_empty_find() {
+        // Find uses string equality, so we don't need to use GC
+        let mut table = Table::new();
+        
+        let foo = ObjString::new("foo".to_string());
+        assert_eq!(table.find(&foo), None);
+    }
+    
+    #[test]
+    fn test_wrong_find() {
+        // Find uses string equality, so we don't need to use GC
+        let mut table = Table::new();
+        
+        let foo = ObjString::new("foo".to_string());
+        assert!(table.set(&foo, Value::Nil));
+        let bar = ObjString::new("bar".to_string());
+        assert_eq!(table.find(&bar), None);
+    }
+    
+    #[test]
+    fn test_finding_256_values() {
+        // Find uses string equality, so we don't need to use GC
+        let mut table = Table::new();
+        let keys = (0..256)
+            .map(|i| ObjString::new(format!("key_{}", i)))
+            .collect::<Vec<_>>();
+        for i in 0..256 {
+            let key = &keys[i];
+            assert!(table.set(&key, Value::Number(i as f32)));
+        }
+
+        for i in 0..256 {
+            let key = ObjString::new(format!("key_{}", i));
+            assert_eq!(table.find(&key), Some(&Value::Number(i as f32)));
         }
     }
 }
