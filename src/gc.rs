@@ -6,7 +6,7 @@ use std::ptr::null_mut;
 #[derive(PartialEq, Debug)]
 pub struct ObjString {
     value: String,
-    hash: usize,
+    hash: u32,
 }
 
 impl ObjString {
@@ -17,7 +17,7 @@ impl ObjString {
     pub fn get_value(&self) -> &String {
         &self.value
     }
-    pub fn get_hash(&self) -> usize {
+    pub fn get_hash(&self) -> u32 {
         self.hash
     }
 }
@@ -78,11 +78,11 @@ pub struct GC {
     refs: *mut ObjRefInner,
 }
 
-fn hash_string(s: &str) -> usize {
+fn hash_string(s: &str) -> u32 {
     // FNV-1a hash
-    let mut h = 2166136261usize;
+    let mut h = 2166136261u32;
     for c in s.as_bytes() {
-        h ^= *c as usize;
+        h ^= *c as u32;
         h = h.wrapping_mul(16777619);
     }
     return h;
