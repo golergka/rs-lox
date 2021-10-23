@@ -1,3 +1,5 @@
+use crate::table::Table;
+use crate::value::Value;
 use core::fmt::{Display, Error, Formatter};
 use std::marker::PhantomData;
 use std::ops::Deref;
@@ -75,6 +77,7 @@ impl Display for ObjRef {
 }
 
 pub struct GC {
+    strings: Table<*mut ObjRefInner>,
     refs: *mut ObjRefInner,
 }
 
@@ -90,22 +93,41 @@ fn hash_string(s: &str) -> u32 {
 
 impl GC {
     pub fn new() -> GC {
-        GC { refs: null_mut() }
+        GC {
+            refs: null_mut(),
+            strings: Table::new(),
+        }
     }
 
-    fn alloc_inner(&mut self, value: Obj) -> ObjRef {
+    fn alloc_inner(&mut self, value: Obj) -> *mut ObjRefInner {
         self.refs = Box::into_raw(Box::new(ObjRefInner {
             value,
             next: self.refs,
         }));
-        ObjRef {
-            ptr: self.refs,
-            _marker: PhantomData,
-        }
+        self.refs
     }
 
     pub fn alloc_string(&mut self, value: String) -> ObjRef {
-        self.alloc_inner(Obj::String(ObjString::new(value)))
+        let obj_string = ObjString::new(value);
+        return if let Some(interned) = self.strings.find(&obj_string) {
+            ObjRef {
+                ptr: *interned,
+                _marker: PhantomData,
+            }
+        } else {
+            let new_inner = self.alloc_inner(Obj::String(obj_string));
+            unsafe {
+                if let Obj::String(inner_string) = &self.refs.as_ref().unwrap().value {
+                    self.strings.set(&inner_string, new_inner);
+                } else {
+                    panic!("Expected Obj::String");
+                }
+            }
+            ObjRef {
+                ptr: self.refs,
+                _marker: PhantomData,
+            }
+        };
     }
 
     unsafe fn free_obj(&mut self, ptr: *mut ObjRefInner) {
