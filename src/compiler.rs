@@ -338,12 +338,19 @@ impl<'a> Compiler<'a> {
     fn statement(&mut self) {
         if self.r#match(TokenKind::Print) {
             self.print_statement();
+        } else {
+            self.expression_statement();
         }
     }
     fn print_statement(&mut self) {
         self.expression();
         self.consume(Semicolon, String::from("Expected ';' after value."));
         self.emit_opcode(OpCode::Print);
+    }
+    fn expression_statement(&mut self) {
+        self.expression();
+        self.consume(Semicolon, String::from("Expected ';' after value."));
+        self.emit_opcode(OpCode::Pop);
     }
     // Emitting
     fn emit_opcode(&mut self, opcode: OpCode) {
@@ -478,36 +485,36 @@ mod tests {
 
         #[test]
         fn number_literal() {
-            let (chunk, _) = test_compile_ok!("123");
+            let (chunk, _) = test_compile_ok!("123;");
             assert_eq!(chunk.get_constant(0), Value::Number(123.0));
-            let expect_code = [Constant as u8, 0, Return as u8];
+            let expect_code = [Constant as u8, 0, Pop as u8, Return as u8];
             assert_eq!(chunk.get_code(), expect_code);
         }
 
         #[test]
         fn true_literal() {
-            let (chunk, _) = test_compile_ok!("true");
-            let expect_code = [True as u8, Return as u8];
+            let (chunk, _) = test_compile_ok!("true;");
+            let expect_code = [True as u8, Pop as u8, Return as u8];
             assert_eq!(chunk.get_code(), expect_code);
         }
 
         #[test]
         fn false_literal() {
-            let (chunk, _) = test_compile_ok!("false");
-            let expect_code = [False as u8, Return as u8];
+            let (chunk, _) = test_compile_ok!("false;");
+            let expect_code = [False as u8, Pop as u8, Return as u8];
             assert_eq!(chunk.get_code(), expect_code);
         }
 
         #[test]
         fn nil_literal() {
-            let (chunk, _) = test_compile_ok!("nil");
-            let expect_code = [Nil as u8, Return as u8];
+            let (chunk, _) = test_compile_ok!("nil;");
+            let expect_code = [Nil as u8, Pop as u8, Return as u8];
             assert_eq!(chunk.get_code(), expect_code);
         }
         #[test]
         fn string_literal() {
-            let (chunk, gc) = test_compile_ok!(r#""hello world""#);
-            let expect_code = [Constant as u8, 0, Return as u8];
+            let (chunk, gc) = test_compile_ok!(r#""hello world";"#);
+            let expect_code = [Constant as u8, 0, Pop as u8, Return as u8];
             assert_eq!(chunk.get_code(), expect_code);
             match chunk.get_constant(0) {
                 Value::Object(o) => assert_eq_str!(o, "hello world"),
@@ -519,22 +526,22 @@ mod tests {
 
     #[test]
     fn negate() {
-        let (chunk, _) = test_compile_ok!("-123");
+        let (chunk, _) = test_compile_ok!("-123;");
         assert_eq!(chunk.get_constant(0), Value::Number(123.0));
-        let expect_code = [Constant as u8, 0, Negate as u8, Return as u8];
+        let expect_code = [Constant as u8, 0, Negate as u8, Pop as u8, Return as u8];
         assert_eq!(chunk.get_code(), expect_code);
     }
 
     #[test]
     fn not() {
-        let (chunk, _) = test_compile_ok!("!true");
-        let expect_code = [True as u8, Not as u8, Return as u8];
+        let (chunk, _) = test_compile_ok!("!true;");
+        let expect_code = [True as u8, Not as u8, Pop as u8, Return as u8];
         assert_eq!(chunk.get_code(), expect_code);
     }
 
     #[test]
     fn equal_equal() {
-        let (chunk, _) = test_compile_ok!("123 == 123");
+        let (chunk, _) = test_compile_ok!("123 == 123;");
         assert_eq!(chunk.get_constant(0), Value::Number(123.0));
         assert_eq!(chunk.get_constant(1), Value::Number(123.0));
         let expect_code = [
@@ -543,6 +550,7 @@ mod tests {
             Constant as u8,
             1,
             Equal as u8,
+            Pop as u8,
             Return as u8,
         ];
         assert_eq!(chunk.get_code(), expect_code);
@@ -550,7 +558,7 @@ mod tests {
 
     #[test]
     fn bang_equal() {
-        let (chunk, _) = test_compile_ok!("123 != 123");
+        let (chunk, _) = test_compile_ok!("123 != 123;");
         assert_eq!(chunk.get_constant(0), Value::Number(123.0));
         assert_eq!(chunk.get_constant(1), Value::Number(123.0));
         let expect_code = [
@@ -560,6 +568,7 @@ mod tests {
             1,
             Equal as u8,
             Not as u8,
+            Pop as u8,
             Return as u8,
         ];
         assert_eq!(chunk.get_code(), expect_code);
@@ -567,7 +576,7 @@ mod tests {
 
     #[test]
     fn greater() {
-        let (chunk, _) = test_compile_ok!("123 > 123");
+        let (chunk, _) = test_compile_ok!("123 > 123;");
         assert_eq!(chunk.get_constant(0), Value::Number(123.0));
         assert_eq!(chunk.get_constant(1), Value::Number(123.0));
         let expect_code = [
@@ -576,6 +585,7 @@ mod tests {
             Constant as u8,
             1,
             Greater as u8,
+            Pop as u8,
             Return as u8,
         ];
         assert_eq!(chunk.get_code(), expect_code);
@@ -588,7 +598,7 @@ mod tests {
         fn expression_statement() {
             let (chunk, _) = test_compile_ok!("123;");
             assert_eq!(chunk.get_constant(0), Value::Number(123.0));
-            let expect_code = [Constant as u8, 0, Return as u8];
+            let expect_code = [Constant as u8, 0, Pop as u8, Return as u8];
             assert_eq!(chunk.get_code(), expect_code);
         }
 
@@ -604,5 +614,6 @@ mod tests {
             ];
             assert_eq!(chunk.get_code(), expect_code);
         }
+
     }
 }

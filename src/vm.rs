@@ -188,6 +188,9 @@ impl<'a> VM<'a> {
                 False => {
                     self.stack_push(Boolean(false))?;
                 }
+                Pop => {
+                    self.stack_pop()?;
+                }
                 Equal => {
                     let (a, b) = self.stack_pop_binary()?;
                     self.stack_push(Boolean(are_equal(a, b)))?;
@@ -711,5 +714,17 @@ mod tests {
         let (result, output) = run_chunk_with_gc!(chunk, gc);
         assert_eq!(result, Ok(Nil));
         assert_eq!(output, "\"hello world\"\n");
+    }
+
+    #[test]
+    fn simple_expression_statement() {
+        let mut chunk = Chunk::new();
+        chunk.write_constant(Number(1.2), 1);
+        chunk.write_constant(Number(3.4), 1);
+        chunk.write_opcode(Add, 1);
+        chunk.write_opcode(Pop, 2);
+        chunk.write_opcode(Return, 3);
+        let (result, _) = run_chunk!(chunk);
+        assert_eq!(result, Ok(Nil));
     }
 }
