@@ -279,6 +279,19 @@ impl<'a> Compiler<'a> {
     fn error(&mut self, message: String) {
         self.error_at(self.previous.clone(), message)
     }
+    fn synchronize(&mut self) {
+        self.panic_mode = false;
+        while self.current.kind != TokenKind::Eof {
+            if self.previous.kind == TokenKind::Semicolon {
+                return;
+            }
+            match self.current.kind {
+                TokenKind::Class | TokenKind::Fun | TokenKind::Var | TokenKind::For | TokenKind::If | TokenKind::While | TokenKind::Print | TokenKind::Return => return,
+                _ => (),
+            }
+            self.advance();
+        }
+    }
     // Parsing
     fn check(&mut self, kind: TokenKind) -> bool {
         self.current.kind == kind
@@ -334,6 +347,9 @@ impl<'a> Compiler<'a> {
     }
     fn declaration(&mut self) {
         self.statement();
+        if self.panic_mode {
+            self.synchronize();
+        }
     }
     fn statement(&mut self) {
         if self.r#match(TokenKind::Print) {
