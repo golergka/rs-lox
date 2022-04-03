@@ -166,9 +166,10 @@ impl<'a> VM<'a> {
                 .ok_or(RuntimeError(format!("Unknown opcode: {}", byte)))?;
             match instruction {
                 Return => {
-                    let value = self.stack_pop()?;
-                    vm_print!(self, "{}\n", value);
-                    return Ok(value);
+                    match self.stack_pop() {
+                        Ok(value) => return Ok(value),
+                        Err(_) => return Ok(Value::Nil),
+                    }
                 }
                 Constant => {
                     let constant = self.read_constant()?;
@@ -266,6 +267,10 @@ impl<'a> VM<'a> {
                     let value = self.stack_pop()?;
                     self.stack_push(Value::Boolean(is_falsey(value)))?;
                 }
+                Print => {
+                    let value = self.stack_pop()?;
+                    vm_print!(self, "{}\n", value);
+                }
             }
             self.config
                 .stdout
@@ -331,7 +336,7 @@ mod tests {
         let mut chunk = Chunk::new();
         chunk.write_opcode(Return, 1);
         let (result, output) = run_chunk!(chunk);
-        assert_eq!(result, Err(RuntimeError(String::from("Stack underflow"))));
+        assert_eq!(result, Ok(Value::Nil));
         assert_eq!(output, "");
     }
 
@@ -539,7 +544,7 @@ mod tests {
         chunk.write_opcode(Return, 3);
         let (result, output) = run_chunk!(chunk);
         assert_eq!(result, Ok(Number(-1.2)));
-        assert_eq!(output, "-1.2\n");
+        assert_eq!(output, "");
     }
 
     #[test]
@@ -563,7 +568,7 @@ mod tests {
         chunk.write_opcode(Return, 3);
         let (result, output) = run_chunk!(chunk);
         assert_eq!(result, Ok(Boolean(false)));
-        assert_eq!(output, "false\n");
+        assert_eq!(output, "");
     }
 
     #[test]
@@ -574,7 +579,7 @@ mod tests {
         chunk.write_opcode(Return, 3);
         let (result, output) = run_chunk!(chunk);
         assert_eq!(result, Ok(Boolean(true)));
-        assert_eq!(output, "true\n");
+        assert_eq!(output, "");
     }
 
     #[test]
@@ -585,7 +590,7 @@ mod tests {
         chunk.write_opcode(Return, 3);
         let (result, output) = run_chunk!(chunk);
         assert_eq!(result, Ok(Boolean(false)));
-        assert_eq!(output, "false\n");
+        assert_eq!(output, "");
     }
 
     #[test]
@@ -596,7 +601,7 @@ mod tests {
         chunk.write_opcode(Return, 3);
         let (result, output) = run_chunk!(chunk);
         assert_eq!(result, Ok(Boolean(false)));
-        assert_eq!(output, "false\n");
+        assert_eq!(output, "");
     }
 
     #[test]
@@ -608,7 +613,7 @@ mod tests {
         chunk.write_opcode(Return, 4);
         let (result, output) = run_chunk!(chunk);
         assert_eq!(result, Ok(Boolean(true)));
-        assert_eq!(output, "true\n");
+        assert_eq!(output, "");
     }
 
     #[test]
@@ -620,7 +625,7 @@ mod tests {
         chunk.write_opcode(Return, 4);
         let (result, output) = run_chunk!(chunk);
         assert_eq!(result, Ok(Boolean(false)));
-        assert_eq!(output, "false\n");
+        assert_eq!(output, "");
     }
 
     #[test]
@@ -632,7 +637,7 @@ mod tests {
         chunk.write_opcode(Return, 4);
         let (result, output) = run_chunk!(chunk);
         assert_eq!(result, Ok(Boolean(true)));
-        assert_eq!(output, "true\n");
+        assert_eq!(output, "");
     }
 
     #[test]
@@ -644,7 +649,7 @@ mod tests {
         chunk.write_opcode(Return, 4);
         let (result, output) = run_chunk!(chunk);
         assert_eq!(result, Ok(Boolean(false)));
-        assert_eq!(output, "false\n");
+        assert_eq!(output, "");
     }
 
     #[test]
@@ -656,7 +661,7 @@ mod tests {
         chunk.write_opcode(Return, 4);
         let (result, output) = run_chunk!(chunk);
         assert_eq!(result, Ok(Boolean(true)));
-        assert_eq!(output, "true\n");
+        assert_eq!(output, "");
     }
 
     #[test]
@@ -668,7 +673,7 @@ mod tests {
         chunk.write_opcode(Return, 4);
         let (result, output) = run_chunk!(chunk);
         assert_eq!(result, Ok(Boolean(false)));
-        assert_eq!(output, "false\n");
+        assert_eq!(output, "");
     }
 
     #[test]
@@ -683,5 +688,28 @@ mod tests {
         chunk.write_opcode(Return, 1);
         let (result, _) = run_chunk!(chunk);
         assert_eq!(result, Ok(Number(-0.82142866)));
+    }
+
+    #[test]
+    fn simple_print_number() {
+        let mut chunk = Chunk::new();
+        chunk.write_constant(Number(1.2), 1);
+        chunk.write_opcode(Print, 1);
+        chunk.write_opcode(Return, 2);
+        let (result, output) = run_chunk!(chunk);
+        assert_eq!(result, Ok(Nil));
+        assert_eq!(output, "1.2\n");
+    }
+
+    #[test]
+    fn simple_print_string() {
+        let mut gc = GC::new();
+        let mut chunk = Chunk::new();
+        chunk.write_constant(Value::Object(gc.alloc_string("hello world".to_string())), 1);
+        chunk.write_opcode(Print, 1);
+        chunk.write_opcode(Return, 2);
+        let (result, output) = run_chunk_with_gc!(chunk, gc);
+        assert_eq!(result, Ok(Nil));
+        assert_eq!(output, "\"hello world\"\n");
     }
 }

@@ -42,6 +42,7 @@ pub fn disassemble_instruction(chunk: &Chunk, offset: usize) -> Option<(usize, S
         Some(Divide) => simple_instruction("OP_DIVIDE", offset),
         Some(Negate) => simple_instruction("OP_NEGATE", offset),
         Some(Not) => simple_instruction("OP_NOT", offset),
+        Some(Print) => simple_instruction("OP_PRINT", offset),
         None => {
             return Some((
                 offset + 1,

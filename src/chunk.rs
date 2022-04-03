@@ -20,6 +20,7 @@ pub enum OpCode {
     Divide,
     Not,
     Negate,
+    Print
 }
 
 pub type LineNumber = i16;

@@ -188,7 +188,7 @@ fn get_rule(token: TokenKind) -> ParseRule {
             infix: None,
             precedence: Precedence::None,
         },
-        Print => ParseRule {
+        TokenKind::Print => ParseRule {
             prefix: None,
             infix: None,
             precedence: Precedence::None,
@@ -280,11 +280,22 @@ impl<'a> Compiler<'a> {
         self.error_at(self.previous.clone(), message)
     }
     // Parsing
+    fn check(&mut self, kind: TokenKind) -> bool {
+        self.current.kind == kind
+    }
     fn consume(&mut self, kind: TokenKind, message: String) {
-        if self.current.kind == kind {
+        if self.check(kind) {
             self.advance()
         } else {
             self.error_at_current(message)
+        }
+    }
+    pub fn r#match(&mut self, kind: TokenKind) -> bool {
+        if self.check(kind) {
+            self.advance();
+            return true;
+        } else {
+            return false;
         }
     }
     fn advance(&mut self) {
@@ -320,6 +331,19 @@ impl<'a> Compiler<'a> {
     // Expressions
     fn expression(&mut self) {
         self.parse_precedence(Precedence::Assignment);
+    }
+    fn declaration(&mut self) {
+        self.statement();
+    }
+    fn statement(&mut self) {
+        if self.r#match(TokenKind::Print) {
+            self.print_statement();
+        }
+    }
+    fn print_statement(&mut self) {
+        self.expression();
+        self.consume(Semicolon, String::from("Expected ';' after value."));
+        self.emit_opcode(OpCode::Print);
     }
     // Emitting
     fn emit_opcode(&mut self, opcode: OpCode) {
@@ -409,7 +433,9 @@ fn string<'a>(compiler: &mut Compiler<'a>) {
 pub fn compile<'a>(source: &'a String, gc: &mut GC) -> Result<Chunk, InterpreterError> {
     let scanner = Scanner::new(&source);
     let mut compiler = Compiler::new(scanner, gc);
-    compiler.expression();
+    while !compiler.r#match(TokenKind::Eof) {
+        compiler.declaration();
+    }
     compiler.consume(TokenKind::Eof, String::from("Expect end of expression."));
     match compiler.errors.len() {
         0 => Ok(compiler.end()),
@@ -445,11 +471,6 @@ mod tests {
         gc.alloc_string("Hello".to_string());
     }
 
-    #[test]
-    fn empty() {
-        let (result, _) = test_compile!("");
-        assert!(!result.is_ok());
-    }
     mod literals {
         use super::*;
         use crate::assert_eq_str;
@@ -558,5 +579,30 @@ mod tests {
             Return as u8,
         ];
         assert_eq!(chunk.get_code(), expect_code);
+    }
+
+    mod statements {
+        use super::*;
+
+        #[test]
+        fn expression_statement() {
+            let (chunk, _) = test_compile_ok!("123;");
+            assert_eq!(chunk.get_constant(0), Value::Number(123.0));
+            let expect_code = [Constant as u8, 0, Return as u8];
+            assert_eq!(chunk.get_code(), expect_code);
+        }
+
+        #[test]
+        fn print_statement() {
+            let (chunk, _) = test_compile_ok!("print 123;");
+            assert_eq!(chunk.get_constant(0), Value::Number(123.0));
+            let expect_code = [
+                Constant as u8,
+                0,
+                Print as u8,
+                Return as u8,
+            ];
+            assert_eq!(chunk.get_code(), expect_code);
+        }
     }
 }
