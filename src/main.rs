@@ -17,6 +17,7 @@ use std::env;
 use std::error::Error;
 
 fn repl() -> Result<(), Box<dyn Error>> {
+    println!("LOX interpreter. Press Ctrl+C to exit.");
     loop {
         use std::io::Write;
         use text_io::read;
@@ -26,7 +27,7 @@ fn repl() -> Result<(), Box<dyn Error>> {
         let mut gc = GC::new();
         let mut vm = VM::new(
             VMConfig {
-                trace_execution: true,
+                trace_execution: false,
                 stdout: &mut stdout,
             },
             &empty_chunk,
@@ -37,7 +38,7 @@ fn repl() -> Result<(), Box<dyn Error>> {
         let input: String = read!("{}\n");
         match vm.with_gc(|gc| compile(&input, gc)) {
             Ok(chunk) => match vm.interpret_chunk(&chunk) {
-                Ok(result) => println!("{}", result),
+                Ok(_) => {}
                 Err(error) => println!("{}", error),
             },
             Err(e) => println!("{}", e),
