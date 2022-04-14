@@ -2,6 +2,7 @@ use crate::chunk::*;
 use crate::compiler::ParserError;
 use crate::debug::*;
 use crate::gc::{Obj, ObjString, GC};
+use crate::table::Table;
 use crate::value::{are_equal, is_falsey, Value, Value::*};
 use crate::vm::OpCode::*;
 use crate::InterpreterError::*;
@@ -49,6 +50,7 @@ pub struct VM<'a> {
     config: VMConfig<'a>,
     stack: [Value; STACK_MAX],
     stack_top: usize,
+    globals: Table<Value>,
     gc: &'a mut GC,
 }
 
@@ -74,6 +76,7 @@ impl<'a> VM<'a> {
             config,
             stack: [Value::Nil; STACK_MAX],
             stack_top: 0,
+            globals: Table::new(),
             gc,
         }
     }
@@ -190,7 +193,24 @@ impl<'a> VM<'a> {
                     self.stack_pop()?;
                 }
                 DefineGlobal => {
-                    panic!("Define global not implemented");
+                    let name = self.read_constant()?;
+                    if let Object(name_obj) = name {
+                        let value = self.stack_pop()?;
+                        let Obj::String(name_string) = &*name_obj;
+                        self.globals.set(name_string, value);
+                    } else {
+                        panic!("Expected string as name, got {:?}", name);
+                    }
+                }
+                DefineGlobalLong => {
+                    let name = self.read_constant_long()?;
+                    if let Object(name_obj) = name {
+                        let value = self.stack_pop()?;
+                        let Obj::String(name_string) = &*name_obj;
+                        self.globals.set(name_string, value);
+                    } else {
+                        panic!("Expected string as name, got {:?}", name);
+                    }
                 }
                 Equal => {
                     let (a, b) = self.stack_pop_binary()?;
@@ -779,12 +799,14 @@ mod tests {
 
     #[test]
     fn global_var_declaration() {
+        let mut gc = GC::new();
         let mut chunk = Chunk::new();
         let const_ref = chunk.add_const(Number(1.2));
         chunk.ref_const(const_ref, OpCode::Constant, OpCode::ConstantLong, 1);
-        chunk.write_opcode(DefineGlobal, 1);
+        let const_ref = chunk.add_const(Value::Object(gc.alloc_string("x".to_string())));
+        chunk.ref_const(const_ref, OpCode::DefineGlobal, OpCode::DefineGlobalLong, 1);
         chunk.write_opcode(Return, 2);
-        let (result, _) = run_chunk!(chunk);
+        let (result, _) = run_chunk_with_gc!(chunk, gc);
         assert_eq!(result, Ok(Nil));
     }
 }

@@ -348,15 +348,50 @@ impl<'a> Compiler<'a> {
             }
         }
     }
+    fn identifier_constant(&mut self) -> usize {
+        let value = self.previous.lexeme.to_string();
+        let obj = self.gc.alloc_string(value);
+        return self.current_chunk.add_const(Value::Object(obj));
+    }
+    fn parse_variable(&mut self, message: String) -> usize {
+        self.consume(TokenKind::Identifier, message);
+        return self.identifier_constant();
+    }
+    fn define_variable(&mut self, name_ref: usize) {
+        self.current_chunk.ref_const(
+            name_ref,
+            OpCode::DefineGlobal,
+            OpCode::DefineGlobalLong,
+            self.previous.line,
+        );
+    }
     // Expressions
     fn expression(&mut self) {
         self.parse_precedence(Precedence::Assignment);
     }
     fn declaration(&mut self) {
-        self.statement();
+        if self.r#match(TokenKind::Var) {
+            self.var_declaration();
+        } else {
+            self.statement();
+        }
+
         if self.panic_mode {
             self.synchronize();
         }
+    }
+    fn var_declaration(&mut self) {
+        let name_ref = self.parse_variable(String::from("Expected variable name."));
+        if self.r#match(TokenKind::Equal) {
+            self.expression();
+        } else {
+            self.emit_opcode(OpCode::Nil);
+        }
+        self.consume(
+            TokenKind::Semicolon,
+            String::from("Expected ';' after variable declaration."),
+        );
+        self.define_variable(name_ref);
     }
     fn statement(&mut self) {
         if self.r#match(TokenKind::Print) {
@@ -482,6 +517,7 @@ pub fn compile<'a>(source: &'a String, gc: &mut GC) -> Result<Chunk, Interpreter
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::assert_eq_str;
 
     macro_rules! test_compile {
         ($program:expr) => {{
@@ -642,8 +678,12 @@ mod tests {
         #[test]
         fn global_var_declaration() {
             let (chunk, _) = test_compile_ok!("var x = 123;");
-            assert_eq!(chunk.get_constant(0), Value::Number(123.0));
-            let expect_code = [Constant as u8, 0, DefineGlobal as u8, Return as u8];
+            match chunk.get_constant(0) {
+                Value::Object(o) => assert_eq_str!(o, "x"),
+                _ => panic!("Expect string object"),
+            }
+            assert_eq!(chunk.get_constant(1), Value::Number(123.0));
+            let expect_code = [Constant as u8, 1, DefineGlobal as u8, 0, Return as u8];
             assert_eq!(chunk.get_code(), expect_code);
         }
     }
