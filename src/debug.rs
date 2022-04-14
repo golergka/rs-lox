@@ -34,6 +34,7 @@ pub fn disassemble_instruction(chunk: &Chunk, offset: usize) -> Option<(usize, S
         Some(True) => simple_instruction("OP_TRUE", offset),
         Some(False) => simple_instruction("OP_FALSE", offset),
         Some(Pop) => simple_instruction("OP_POP", offset),
+        Some(DefineGlobal) => simple_instruction("OP_DEFINE_GLOBAL", offset),
         Some(Equal) => simple_instruction("OP_EQUAL", offset),
         Some(Greater) => simple_instruction("OP_GREATER", offset),
         Some(Less) => simple_instruction("OP_LESS", offset),

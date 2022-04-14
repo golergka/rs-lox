@@ -191,6 +191,9 @@ impl<'a> VM<'a> {
                 Pop => {
                     self.stack_pop()?;
                 }
+                DefineGlobal => {
+                    panic!("Define global not implemented");
+                }
                 Equal => {
                     let (a, b) = self.stack_pop_binary()?;
                     self.stack_push(Boolean(are_equal(a, b)))?;

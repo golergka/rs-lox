@@ -12,6 +12,7 @@ pub enum OpCode {
     True,
     False,
     Pop,
+    DefineGlobal,
     Equal,
     Greater,
     Less,
