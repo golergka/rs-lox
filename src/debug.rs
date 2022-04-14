@@ -114,7 +114,8 @@ mod tests {
     #[test]
     fn constant() {
         let mut chunk = Chunk::new();
-        chunk.write_constant(Number(1.2), 1);
+        let const_ref = chunk.add_const(Number(1.2));
+        chunk.ref_const(const_ref, OpCode::Constant, OpCode::ConstantLong, 1);
         let result = disassemble_chunk(&chunk, "test chunk");
         assert_eq!(
             result,
@@ -129,7 +130,8 @@ mod tests {
     fn long_constant() {
         let mut chunk = Chunk::new();
         for i in 0..300 {
-            chunk.write_constant(Number(i as f32), i);
+            let const_ref = chunk.add_const(Number(i as f32));
+            chunk.ref_const(const_ref, OpCode::Constant, OpCode::ConstantLong, i);
         }
         let mut target_result = String::from("== test chunk ==\n");
         for i in 0..256 {
@@ -183,7 +185,7 @@ mod tests {
             )
         );
     }
-    
+
     #[test]
     fn equal() {
         let mut chunk = Chunk::new();
@@ -270,7 +272,8 @@ mod tests {
     #[test]
     fn line_numbers() {
         let mut chunk = Chunk::new();
-        chunk.write_constant(Number(1.2), 123);
+        let const_ref = chunk.add_const(Number(1.2));
+        chunk.ref_const(const_ref, OpCode::Constant, OpCode::ConstantLong, 123);
         chunk.write_opcode(Return, 123);
         let result = disassemble_chunk(&chunk, "test chunk");
         assert_eq!(

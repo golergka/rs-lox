@@ -7,7 +7,7 @@ pub enum Value {
     Nil,
     Number(f32),
     Boolean(bool),
-    Object(ObjRef)
+    Object(ObjRef),
 }
 
 impl Display for Value {
@@ -16,7 +16,7 @@ impl Display for Value {
             Value::Nil => write!(f, "nil"),
             Value::Number(n) => n.fmt(f),
             Value::Boolean(b) => b.fmt(f),
-            Value::Object(o) => o.fmt(f)
+            Value::Object(o) => o.fmt(f),
         }
     }
 }
@@ -55,7 +55,10 @@ mod tests {
     fn test_are_equal() {
         assert_eq!(are_equal(Nil, Nil), true);
         assert_eq!(are_equal(Value::Number(0.0), Value::Number(0.0)), true);
-        assert_eq!(are_equal(Value::Boolean(false), Value::Boolean(false)), true);
+        assert_eq!(
+            are_equal(Value::Boolean(false), Value::Boolean(false)),
+            true
+        );
         assert_eq!(are_equal(Value::Boolean(true), Value::Boolean(true)), true);
         assert_eq!(are_equal(Value::Number(0.0), Value::Boolean(false)), false);
         assert_eq!(are_equal(Value::Number(0.0), Value::Boolean(true)), false);

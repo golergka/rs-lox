@@ -11,8 +11,8 @@ mod table;
 
 use crate::chunk::Chunk;
 use crate::compiler::compile;
-use crate::vm::*;
 use crate::gc::GC;
+use crate::vm::*;
 use std::env;
 use std::error::Error;
 
@@ -31,7 +31,7 @@ fn repl() -> Result<(), Box<dyn Error>> {
                 stdout: &mut stdout,
             },
             &empty_chunk,
-            &mut gc
+            &mut gc,
         );
         print!("> ");
         std::io::stdout().flush()?;
@@ -61,7 +61,7 @@ fn run_file(path: &str) -> Result<(), Box<dyn Error>> {
                     stdout: &mut stdout,
                 },
                 &chunk,
-                &mut gc
+                &mut gc,
             );
             match vm.run() {
                 Ok(result) => {
