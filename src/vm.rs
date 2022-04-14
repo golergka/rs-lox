@@ -165,12 +165,10 @@ impl<'a> VM<'a> {
             let instruction = FromPrimitive::from_u8(byte)
                 .ok_or(RuntimeError(format!("Unknown opcode: {}", byte)))?;
             match instruction {
-                Return => {
-                    match self.stack_pop() {
-                        Ok(value) => return Ok(value),
-                        Err(_) => return Ok(Value::Nil),
-                    }
-                }
+                Return => match self.stack_pop() {
+                    Ok(value) => return Ok(value),
+                    Err(_) => return Ok(Value::Nil),
+                },
                 Constant => {
                     let constant = self.read_constant()?;
                     self.stack_push(constant)?;
@@ -346,7 +344,8 @@ mod tests {
     #[test]
     fn constant_wo_return() {
         let mut chunk = Chunk::new();
-        chunk.write_constant(Number(1.2), 1);
+        let const_ref = chunk.add_const(Number(1.2));
+        chunk.ref_const(const_ref, OpCode::Constant, OpCode::ConstantLong, 1);
         let (result, _) = run_chunk!(chunk);
         assert_eq!(
             result,
@@ -358,7 +357,8 @@ mod tests {
     fn constants_break_stack() {
         let mut chunk = Chunk::new();
         for i in 0..257 {
-            chunk.write_constant(Number(i as f32), i);
+            let const_ref = chunk.add_const(Number(i as f32));
+            chunk.ref_const(const_ref, OpCode::Constant, OpCode::ConstantLong, i);
         }
         let (result, _) = run_chunk!(chunk);
         assert_eq!(result, Err(RuntimeError(String::from("Stack overflow"))));
@@ -367,7 +367,8 @@ mod tests {
     #[test]
     fn return_w_number_constant() {
         let mut chunk = Chunk::new();
-        chunk.write_constant(Number(1.2), 1);
+        let const_ref = chunk.add_const(Number(1.2));
+        chunk.ref_const(const_ref, OpCode::Constant, OpCode::ConstantLong, 1);
         chunk.write_opcode(Return, 2);
         let (result, _) = run_chunk!(chunk);
         assert_eq!(result, Ok(Number(1.2)));
@@ -395,7 +396,8 @@ mod tests {
     fn return_w_string_literal() {
         let mut gc = GC::new();
         let mut chunk = Chunk::new();
-        chunk.write_constant(Value::Object(gc.alloc_string("hello world".to_string())), 1);
+        let const_ref = chunk.add_const(Value::Object(gc.alloc_string("hello world".to_string())));
+        chunk.ref_const(const_ref, Constant, ConstantLong, 1);
         chunk.write_opcode(Return, 2);
         let (result, _) = run_chunk_with_gc!(chunk, gc);
         match result {
@@ -408,7 +410,8 @@ mod tests {
     fn return_w_many_constants() {
         let mut chunk = Chunk::new();
         for i in 0..256 {
-            chunk.write_constant(Number(i as f32), i);
+            let const_ref = chunk.add_const(Number(i as f32));
+            chunk.ref_const(const_ref, OpCode::Constant, OpCode::ConstantLong, i);
         }
         chunk.write_opcode(Return, 256);
         let (result, _) = run_chunk!(chunk);
@@ -418,8 +421,10 @@ mod tests {
     #[test]
     fn add_numbers() {
         let mut chunk = Chunk::new();
-        chunk.write_constant(Number(1.0), 1);
-        chunk.write_constant(Number(1.0), 2);
+        let const_ref = chunk.add_const(Number(1.0));
+        chunk.ref_const(const_ref, OpCode::Constant, OpCode::ConstantLong, 1);
+        let const_ref = chunk.add_const(Number(1.0));
+        chunk.ref_const(const_ref, OpCode::Constant, OpCode::ConstantLong, 2);
         chunk.write_opcode(Add, 3);
         chunk.write_opcode(Return, 4);
         let (result, _) = run_chunk!(chunk);
@@ -429,8 +434,10 @@ mod tests {
     #[test]
     fn add_number_nil() {
         let mut chunk = Chunk::new();
-        chunk.write_constant(Nil, 1);
-        chunk.write_constant(Number(1.0), 2);
+        let const_ref = chunk.add_const(Nil);
+        chunk.ref_const(const_ref, OpCode::Constant, OpCode::ConstantLong, 1);
+        let const_ref = chunk.add_const(Number(1.0));
+        chunk.ref_const(const_ref, OpCode::Constant, OpCode::ConstantLong, 2);
         chunk.write_opcode(Add, 3);
         chunk.write_opcode(Return, 4);
         let (result, _) = run_chunk!(chunk);
@@ -445,8 +452,10 @@ mod tests {
     fn add_strings() {
         let mut gc = GC::new();
         let mut chunk = Chunk::new();
-        chunk.write_constant(Value::Object(gc.alloc_string("hello".to_string())), 1);
-        chunk.write_constant(Value::Object(gc.alloc_string("world".to_string())), 2);
+        let const_ref = chunk.add_const(Value::Object(gc.alloc_string("hello".to_string())));
+        chunk.ref_const(const_ref, Constant, ConstantLong, 1);
+        let const_ref = chunk.add_const(Value::Object(gc.alloc_string("world".to_string())));
+        chunk.ref_const(const_ref, Constant, ConstantLong, 2);
         chunk.write_opcode(Add, 3);
         chunk.write_opcode(Return, 4);
         println!("Running");
@@ -461,8 +470,10 @@ mod tests {
     #[test]
     fn subtract_numbers() {
         let mut chunk = Chunk::new();
-        chunk.write_constant(Number(1.2), 1);
-        chunk.write_constant(Number(3.4), 2);
+        let const_ref = chunk.add_const(Number(1.2));
+        chunk.ref_const(const_ref, OpCode::Constant, OpCode::ConstantLong, 1);
+        let const_ref = chunk.add_const(Number(3.4));
+        chunk.ref_const(const_ref, OpCode::Constant, OpCode::ConstantLong, 2);
         chunk.write_opcode(Subtract, 3);
         chunk.write_opcode(Return, 4);
         let (result, _) = run_chunk!(chunk);
@@ -472,8 +483,10 @@ mod tests {
     #[test]
     fn subtract_number_nil() {
         let mut chunk = Chunk::new();
-        chunk.write_constant(Nil, 1);
-        chunk.write_constant(Number(1.0), 2);
+        let const_ref = chunk.add_const(Nil);
+        chunk.ref_const(const_ref, OpCode::Constant, OpCode::ConstantLong, 1);
+        let const_ref = chunk.add_const(Number(1.0));
+        chunk.ref_const(const_ref, OpCode::Constant, OpCode::ConstantLong, 2);
         chunk.write_opcode(Subtract, 3);
         chunk.write_opcode(Return, 4);
         let (result, _) = run_chunk!(chunk);
@@ -488,8 +501,10 @@ mod tests {
     #[test]
     fn multiply_numbers() {
         let mut chunk = Chunk::new();
-        chunk.write_constant(Number(3.0), 1);
-        chunk.write_constant(Number(-0.5), 2);
+        let const_ref = chunk.add_const(Number(3.0));
+        chunk.ref_const(const_ref, OpCode::Constant, OpCode::ConstantLong, 1);
+        let const_ref = chunk.add_const(Number(-0.5));
+        chunk.ref_const(const_ref, OpCode::Constant, OpCode::ConstantLong, 2);
         chunk.write_opcode(Multiply, 3);
         chunk.write_opcode(Return, 4);
         let (result, _) = run_chunk!(chunk);
@@ -499,8 +514,10 @@ mod tests {
     #[test]
     fn multiply_number_nil() {
         let mut chunk = Chunk::new();
-        chunk.write_constant(Nil, 1);
-        chunk.write_constant(Number(1.0), 2);
+        let const_ref = chunk.add_const(Nil);
+        chunk.ref_const(const_ref, OpCode::Constant, OpCode::ConstantLong, 1);
+        let const_ref = chunk.add_const(Number(1.0));
+        chunk.ref_const(const_ref, OpCode::Constant, OpCode::ConstantLong, 2);
         chunk.write_opcode(Multiply, 3);
         chunk.write_opcode(Return, 4);
         let (result, _) = run_chunk!(chunk);
@@ -515,8 +532,10 @@ mod tests {
     #[test]
     fn divide_numbers() {
         let mut chunk = Chunk::new();
-        chunk.write_constant(Number(10.0), 1);
-        chunk.write_constant(Number(2.0), 2);
+        let const_ref = chunk.add_const(Number(10.0));
+        chunk.ref_const(const_ref, OpCode::Constant, OpCode::ConstantLong, 1);
+        let const_ref = chunk.add_const(Number(2.0));
+        chunk.ref_const(const_ref, OpCode::Constant, OpCode::ConstantLong, 2);
         chunk.write_opcode(Divide, 3);
         chunk.write_opcode(Return, 4);
         let (result, _) = run_chunk!(chunk);
@@ -526,8 +545,10 @@ mod tests {
     #[test]
     fn divide_number_nil() {
         let mut chunk = Chunk::new();
-        chunk.write_constant(Nil, 1);
-        chunk.write_constant(Number(1.0), 2);
+        let const_ref = chunk.add_const(Nil);
+        chunk.ref_const(const_ref, OpCode::Constant, OpCode::ConstantLong, 1);
+        let const_ref = chunk.add_const(Number(1.0));
+        chunk.ref_const(const_ref, OpCode::Constant, OpCode::ConstantLong, 2);
         chunk.write_opcode(Divide, 3);
         chunk.write_opcode(Return, 4);
         let (result, _) = run_chunk!(chunk);
@@ -542,7 +563,8 @@ mod tests {
     #[test]
     fn negate_number() {
         let mut chunk = Chunk::new();
-        chunk.write_constant(Number(1.2), 1);
+        let const_ref = chunk.add_const(Number(1.2));
+        chunk.ref_const(const_ref, OpCode::Constant, OpCode::ConstantLong, 1);
         chunk.write_opcode(Negate, 2);
         chunk.write_opcode(Return, 3);
         let (result, output) = run_chunk!(chunk);
@@ -553,7 +575,8 @@ mod tests {
     #[test]
     fn negate_nil() {
         let mut chunk = Chunk::new();
-        chunk.write_constant(Nil, 1);
+        let const_ref = chunk.add_const(Nil);
+        chunk.ref_const(const_ref, OpCode::Constant, OpCode::ConstantLong, 1);
         chunk.write_opcode(Negate, 2);
         chunk.write_opcode(Return, 3);
         let (result, _) = run_chunk!(chunk);
@@ -566,7 +589,8 @@ mod tests {
     #[test]
     fn not_true() {
         let mut chunk = Chunk::new();
-        chunk.write_constant(Boolean(true), 1);
+        let const_ref = chunk.add_const(Boolean(true));
+        chunk.ref_const(const_ref, OpCode::Constant, OpCode::ConstantLong, 1);
         chunk.write_opcode(Not, 2);
         chunk.write_opcode(Return, 3);
         let (result, output) = run_chunk!(chunk);
@@ -577,7 +601,8 @@ mod tests {
     #[test]
     fn not_nil() {
         let mut chunk = Chunk::new();
-        chunk.write_constant(Nil, 1);
+        let const_ref = chunk.add_const(Nil);
+        chunk.ref_const(const_ref, OpCode::Constant, OpCode::ConstantLong, 1);
         chunk.write_opcode(Not, 2);
         chunk.write_opcode(Return, 3);
         let (result, output) = run_chunk!(chunk);
@@ -588,7 +613,8 @@ mod tests {
     #[test]
     fn not_zero() {
         let mut chunk = Chunk::new();
-        chunk.write_constant(Number(0.0), 1);
+        let const_ref = chunk.add_const(Number(0.0));
+        chunk.ref_const(const_ref, OpCode::Constant, OpCode::ConstantLong, 1);
         chunk.write_opcode(Not, 2);
         chunk.write_opcode(Return, 3);
         let (result, output) = run_chunk!(chunk);
@@ -599,7 +625,8 @@ mod tests {
     #[test]
     fn not_one() {
         let mut chunk = Chunk::new();
-        chunk.write_constant(Number(1.0), 1);
+        let const_ref = chunk.add_const(Number(1.0));
+        chunk.ref_const(const_ref, OpCode::Constant, OpCode::ConstantLong, 1);
         chunk.write_opcode(Not, 2);
         chunk.write_opcode(Return, 3);
         let (result, output) = run_chunk!(chunk);
@@ -610,8 +637,10 @@ mod tests {
     #[test]
     fn equal_true() {
         let mut chunk = Chunk::new();
-        chunk.write_constant(Number(1.0), 1);
-        chunk.write_constant(Number(1.0), 2);
+        let const_ref = chunk.add_const(Number(1.0));
+        chunk.ref_const(const_ref, OpCode::Constant, OpCode::ConstantLong, 1);
+        let const_ref = chunk.add_const(Number(1.0));
+        chunk.ref_const(const_ref, OpCode::Constant, OpCode::ConstantLong, 2);
         chunk.write_opcode(Equal, 3);
         chunk.write_opcode(Return, 4);
         let (result, output) = run_chunk!(chunk);
@@ -622,8 +651,10 @@ mod tests {
     #[test]
     fn equal_false() {
         let mut chunk = Chunk::new();
-        chunk.write_constant(Number(1.0), 1);
-        chunk.write_constant(Number(2.0), 2);
+        let const_ref = chunk.add_const(Number(1.0));
+        chunk.ref_const(const_ref, OpCode::Constant, OpCode::ConstantLong, 1);
+        let const_ref = chunk.add_const(Number(2.0));
+        chunk.ref_const(const_ref, OpCode::Constant, OpCode::ConstantLong, 2);
         chunk.write_opcode(Equal, 3);
         chunk.write_opcode(Return, 4);
         let (result, output) = run_chunk!(chunk);
@@ -634,8 +665,10 @@ mod tests {
     #[test]
     fn greater_true() {
         let mut chunk = Chunk::new();
-        chunk.write_constant(Number(2.0), 2);
-        chunk.write_constant(Number(1.0), 1);
+        let const_ref = chunk.add_const(Number(2.0));
+        chunk.ref_const(const_ref, OpCode::Constant, OpCode::ConstantLong, 1);
+        let const_ref = chunk.add_const(Number(1.0));
+        chunk.ref_const(const_ref, OpCode::Constant, OpCode::ConstantLong, 2);
         chunk.write_opcode(Greater, 3);
         chunk.write_opcode(Return, 4);
         let (result, output) = run_chunk!(chunk);
@@ -646,8 +679,10 @@ mod tests {
     #[test]
     fn greater_false() {
         let mut chunk = Chunk::new();
-        chunk.write_constant(Number(1.0), 1);
-        chunk.write_constant(Number(1.0), 2);
+        let const_ref = chunk.add_const(Number(1.0));
+        chunk.ref_const(const_ref, OpCode::Constant, OpCode::ConstantLong, 1);
+        let const_ref = chunk.add_const(Number(1.0));
+        chunk.ref_const(const_ref, OpCode::Constant, OpCode::ConstantLong, 2);
         chunk.write_opcode(Greater, 3);
         chunk.write_opcode(Return, 4);
         let (result, output) = run_chunk!(chunk);
@@ -658,8 +693,10 @@ mod tests {
     #[test]
     fn less_true() {
         let mut chunk = Chunk::new();
-        chunk.write_constant(Number(1.0), 1);
-        chunk.write_constant(Number(2.0), 2);
+        let const_ref = chunk.add_const(Number(1.0));
+        chunk.ref_const(const_ref, OpCode::Constant, OpCode::ConstantLong, 1);
+        let const_ref = chunk.add_const(Number(2.0));
+        chunk.ref_const(const_ref, OpCode::Constant, OpCode::ConstantLong, 2);
         chunk.write_opcode(Less, 3);
         chunk.write_opcode(Return, 4);
         let (result, output) = run_chunk!(chunk);
@@ -670,8 +707,10 @@ mod tests {
     #[test]
     fn less_false() {
         let mut chunk = Chunk::new();
-        chunk.write_constant(Number(1.0), 1);
-        chunk.write_constant(Number(1.0), 2);
+        let const_ref = chunk.add_const(Number(1.0));
+        chunk.ref_const(const_ref, OpCode::Constant, OpCode::ConstantLong, 1);
+        let const_ref = chunk.add_const(Number(1.0));
+        chunk.ref_const(const_ref, OpCode::Constant, OpCode::ConstantLong, 2);
         chunk.write_opcode(Less, 3);
         chunk.write_opcode(Return, 4);
         let (result, output) = run_chunk!(chunk);
@@ -682,10 +721,13 @@ mod tests {
     #[test]
     fn simple_operations() {
         let mut chunk = Chunk::new();
-        chunk.write_constant(Number(1.2), 1);
-        chunk.write_constant(Number(3.4), 1);
+        let const_ref = chunk.add_const(Number(1.2));
+        chunk.ref_const(const_ref, OpCode::Constant, OpCode::ConstantLong, 1);
+        let const_ref = chunk.add_const(Number(3.4));
+        chunk.ref_const(const_ref, OpCode::Constant, OpCode::ConstantLong, 2);
         chunk.write_opcode(Add, 1);
-        chunk.write_constant(Number(5.6), 1);
+        let const_ref = chunk.add_const(Number(5.6));
+        chunk.ref_const(const_ref, OpCode::Constant, OpCode::ConstantLong, 3);
         chunk.write_opcode(Divide, 1);
         chunk.write_opcode(Negate, 1);
         chunk.write_opcode(Return, 1);
@@ -696,7 +738,8 @@ mod tests {
     #[test]
     fn simple_print_number() {
         let mut chunk = Chunk::new();
-        chunk.write_constant(Number(1.2), 1);
+        let const_ref = chunk.add_const(Number(1.2));
+        chunk.ref_const(const_ref, OpCode::Constant, OpCode::ConstantLong, 1);
         chunk.write_opcode(Print, 1);
         chunk.write_opcode(Return, 2);
         let (result, output) = run_chunk!(chunk);
@@ -708,7 +751,8 @@ mod tests {
     fn simple_print_string() {
         let mut gc = GC::new();
         let mut chunk = Chunk::new();
-        chunk.write_constant(Value::Object(gc.alloc_string("hello world".to_string())), 1);
+        let const_ref = chunk.add_const(Value::Object(gc.alloc_string("hello world".to_string())));
+        chunk.ref_const(const_ref, OpCode::Constant, OpCode::ConstantLong, 1);
         chunk.write_opcode(Print, 1);
         chunk.write_opcode(Return, 2);
         let (result, output) = run_chunk_with_gc!(chunk, gc);
@@ -719,8 +763,10 @@ mod tests {
     #[test]
     fn simple_expression_statement() {
         let mut chunk = Chunk::new();
-        chunk.write_constant(Number(1.2), 1);
-        chunk.write_constant(Number(3.4), 1);
+        let const_ref = chunk.add_const(Number(1.2));
+        chunk.ref_const(const_ref, OpCode::Constant, OpCode::ConstantLong, 1);
+        let const_ref = chunk.add_const(Number(3.4));
+        chunk.ref_const(const_ref, OpCode::Constant, OpCode::ConstantLong, 2);
         chunk.write_opcode(Add, 1);
         chunk.write_opcode(Pop, 2);
         chunk.write_opcode(Return, 3);

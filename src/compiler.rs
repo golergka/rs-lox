@@ -286,7 +286,14 @@ impl<'a> Compiler<'a> {
                 return;
             }
             match self.current.kind {
-                TokenKind::Class | TokenKind::Fun | TokenKind::Var | TokenKind::For | TokenKind::If | TokenKind::While | TokenKind::Print | TokenKind::Return => return,
+                TokenKind::Class
+                | TokenKind::Fun
+                | TokenKind::Var
+                | TokenKind::For
+                | TokenKind::If
+                | TokenKind::While
+                | TokenKind::Print
+                | TokenKind::Return => return,
                 _ => (),
             }
             self.advance();
@@ -371,7 +378,7 @@ impl<'a> Compiler<'a> {
     // Emitting
     fn emit_opcode(&mut self, opcode: OpCode) {
         self.current_chunk
-            .write_chunk(opcode as u8, self.previous.line)
+            .write_byte(opcode as u8, self.previous.line)
     }
     fn emit_opcodes(&mut self, opcodes: &[OpCode]) {
         for opcode in opcodes {
@@ -382,7 +389,13 @@ impl<'a> Compiler<'a> {
         self.emit_opcode(OpCode::Return)
     }
     fn emit_constant(&mut self, value: Value) {
-        self.current_chunk.write_constant(value, self.previous.line)
+        let const_ref = self.current_chunk.add_const(value);
+        self.current_chunk.ref_const(
+            const_ref,
+            OpCode::Constant,
+            OpCode::ConstantLong,
+            self.previous.line,
+        );
     }
     fn end(mut self) -> Chunk {
         self.emit_return();
@@ -622,14 +635,8 @@ mod tests {
         fn print_statement() {
             let (chunk, _) = test_compile_ok!("print 123;");
             assert_eq!(chunk.get_constant(0), Value::Number(123.0));
-            let expect_code = [
-                Constant as u8,
-                0,
-                Print as u8,
-                Return as u8,
-            ];
+            let expect_code = [Constant as u8, 0, Print as u8, Return as u8];
             assert_eq!(chunk.get_code(), expect_code);
         }
-
     }
 }

@@ -21,7 +21,7 @@ pub enum OpCode {
     Divide,
     Not,
     Negate,
-    Print
+    Print,
 }
 
 pub type LineNumber = i16;
@@ -41,12 +41,15 @@ impl Chunk {
             lines: Rle::new(),
         }
     }
-    pub fn write_chunk(&mut self, op: u8, line: LineNumber) {
+
+    pub fn write_byte(&mut self, op: u8, line: LineNumber) {
         self.code.push(op);
         self.lines.push(line);
     }
+
+    /// Helper method to write an OpCode, functionally equal to `write_byte`
     pub fn write_opcode(&mut self, op: OpCode, line: LineNumber) {
-        self.write_chunk(op as u8, line);
+        self.write_byte(op as u8, line);
     }
 
     pub fn write_short(&mut self, value: u16, line: LineNumber) {
@@ -77,21 +80,26 @@ impl Chunk {
         self.lines.get(offset)
     }
 
-    fn add_constant(&mut self, value: Value) -> usize {
+    pub fn add_const(&mut self, value: Value) -> usize {
         self.constants.push(value);
         return self.constants.len() - 1;
     }
 
-    pub fn write_constant(&mut self, value: Value, line: LineNumber) {
-        let constant = self.add_constant(value);
-        if let Ok(op) = u8::try_from(constant) {
-            self.write_opcode(OpCode::Constant, line);
-            self.write_chunk(op, line);
-        } else if let Ok(op) = u16::try_from(constant) {
-            self.write_opcode(OpCode::ConstantLong, line);
-            self.write_short(op, line);
+    pub fn ref_const(
+        &mut self,
+        const_ref: usize,
+        byte_op: OpCode,
+        long_op: OpCode,
+        line: LineNumber,
+    ) {
+        if let Ok(const_byte) = u8::try_from(const_ref) {
+            self.write_opcode(byte_op, line);
+            self.write_byte(const_byte, line);
+        } else if let Ok(const_long) = u16::try_from(const_ref) {
+            self.write_opcode(long_op, line);
+            self.write_short(const_long, line);
         } else {
-            panic!("Can't support more than 65 536 constants");
+            panic!("Invalid constant reference");
         }
     }
 
@@ -136,14 +144,15 @@ mod tests {
     #[test]
     fn adds_correct_constant() {
         let mut chunk = Chunk::new();
-        chunk.add_constant(Value::Number(1.2));
+        chunk.add_const(Value::Number(1.2));
         assert_eq!(chunk.get_constant(0), Value::Number(1.2));
     }
 
     #[test]
     fn writes_constant() {
         let mut chunk = Chunk::new();
-        chunk.write_constant(Value::Number(1.2), 1);
+        let const_ref = chunk.add_const(Value::Number(1.2));
+        chunk.ref_const(const_ref, OpCode::Constant, OpCode::ConstantLong, 1);
         assert_eq!(chunk.get_code(), &[OpCode::Constant as u8, 0]);
         assert_eq!(chunk.get_constant(0), Value::Number(1.2));
     }
@@ -152,7 +161,7 @@ mod tests {
     fn writes_300_constants() {
         let mut chunk = Chunk::new();
         for i in 0..300 {
-            chunk.write_constant(Value::Number(i as f32), i);
+            chunk.add_const(Value::Number(i as f32));
         }
         for i in 0..300 {
             assert_eq!(chunk.get_constant(i), Value::Number(i as f32));
