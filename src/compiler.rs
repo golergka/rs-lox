@@ -633,13 +633,12 @@ mod tests {
 
         #[test]
         fn global_var_declaration() {
-            let (chunk, _) = test_compile_ok!("var x = nil;");
+            let (chunk, _) = test_compile_ok!("var x = 123;");
             assert_eq!(chunk.get_constant(0), Value::Number(123.0));
             let expect_code = [
                 Constant as u8,
                 0,
                 DefineGlobal as u8,
-                0,
                 Return as u8,
             ];
             assert_eq!(chunk.get_code(), expect_code);

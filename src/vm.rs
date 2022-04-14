@@ -730,4 +730,14 @@ mod tests {
         let (result, _) = run_chunk!(chunk);
         assert_eq!(result, Ok(Nil));
     }
+
+    #[test]
+    fn global_var_declaration() {
+        let mut chunk = Chunk::new();
+        chunk.write_constant(Number(123.0), 1);
+        chunk.write_opcode(DefineGlobal, 1);
+        chunk.write_opcode(Return, 2);
+        let (result, _) = run_chunk!(chunk);
+        assert_eq!(result, Ok(Nil));
+    }
 }
