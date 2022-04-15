@@ -27,7 +27,7 @@ fn repl() -> Result<(), Box<dyn Error>> {
         let mut gc = GC::new();
         let mut vm = VM::new(
             VMConfig {
-                trace_execution: false,
+                trace_execution: true,
                 stdout: &mut stdout,
             },
             &empty_chunk,

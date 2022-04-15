@@ -129,7 +129,7 @@ fn get_rule(token: TokenKind) -> ParseRule {
             precedence: Precedence::Comparison,
         },
         Identifier => ParseRule {
-            prefix: None,
+            prefix: Some(variable),
             infix: None,
             precedence: Precedence::None,
         },
@@ -501,6 +501,20 @@ fn string<'a>(compiler: &mut Compiler<'a>) {
     compiler.emit_constant(Value::Object(obj));
 }
 
+fn named_variable<'a>(compiler: &mut Compiler<'a>) {
+    let name_ref = compiler.identifier_constant();
+    compiler.current_chunk.ref_const(
+        name_ref,
+        OpCode::Get,
+        OpCode::GetLong,
+        compiler.previous.line,
+    );
+}
+
+fn variable<'a>(compiler: &mut Compiler<'a>) {
+    named_variable(compiler);
+}
+
 pub fn compile<'a>(source: &'a String, gc: &mut GC) -> Result<Chunk, InterpreterError> {
     let scanner = Scanner::new(&source);
     let mut compiler = Compiler::new(scanner, gc);
@@ -676,7 +690,18 @@ mod tests {
         }
 
         #[test]
-        fn global_var_declaration() {
+        fn global_var_declaration_wo_initializer() {
+            let (chunk, _) = test_compile_ok!("var x;");
+            match chunk.get_constant(0) {
+                Value::Object(o) => assert_eq_str!(o, "x"),
+                _ => panic!("Expect string object"),
+            }
+            let expect_code = [Nil as u8, DefineGlobal as u8, 0, Return as u8];
+            assert_eq!(chunk.get_code(), expect_code);
+        }
+
+        #[test]
+        fn global_var_declaration_with_init() {
             let (chunk, _) = test_compile_ok!("var x = 123;");
             match chunk.get_constant(0) {
                 Value::Object(o) => assert_eq_str!(o, "x"),
@@ -684,6 +709,31 @@ mod tests {
             }
             assert_eq!(chunk.get_constant(1), Value::Number(123.0));
             let expect_code = [Constant as u8, 1, DefineGlobal as u8, 0, Return as u8];
+            assert_eq!(chunk.get_code(), expect_code);
+        }
+
+        #[test]
+        fn global_var_read() {
+            let (chunk, _) = test_compile_ok!("var x = 123; x;");
+            match chunk.get_constant(0) {
+                Value::Object(o) => assert_eq_str!(o, "x"),
+                _ => panic!("Expect string object"),
+            }
+            assert_eq!(chunk.get_constant(1), Value::Number(123.0));
+            match chunk.get_constant(2) {
+                Value::Object(o) => assert_eq_str!(o, "x"),
+                _ => panic!("Expect string object"),
+            }
+            let expect_code = [
+                Constant as u8,
+                1,
+                DefineGlobal as u8,
+                0,
+                Get as u8,
+                2,
+                Pop as u8,
+                Return as u8,
+            ];
             assert_eq!(chunk.get_code(), expect_code);
         }
     }

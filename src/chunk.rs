@@ -12,6 +12,8 @@ pub enum OpCode {
     True,
     False,
     Pop,
+    Get,
+    GetLong,
     DefineGlobal,
     DefineGlobalLong,
     Equal,
@@ -106,7 +108,10 @@ impl Chunk {
     }
 
     pub fn get_constant(&self, offset: usize) -> Value {
-        self.constants[offset]
+        match self.constants.get(offset) {
+            Some(value) => value.clone(),
+            None => panic!("Invalid constant reference: {}", offset),
+        }
     }
 }
 
