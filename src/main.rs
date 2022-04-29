@@ -27,7 +27,8 @@ fn repl() -> Result<(), Box<dyn Error>> {
         let mut gc = GC::new();
         let mut vm = VM::new(
             VMConfig {
-                trace_execution: true,
+                trace_instructions: true,
+                trace_stack: true,
                 stdout: &mut stdout,
             },
             &empty_chunk,
@@ -57,7 +58,8 @@ fn run_file(path: &str) -> Result<(), Box<dyn Error>> {
         Ok(chunk) => {
             let mut vm = VM::new(
                 VMConfig {
-                    trace_execution: true,
+                    trace_instructions: true,
+                    trace_stack: true,
                     stdout: &mut stdout,
                 },
                 &chunk,

@@ -12,7 +12,8 @@ use std::fmt::Formatter;
 use std::io;
 
 pub struct VMConfig<'a> {
-    pub trace_execution: bool,
+    pub trace_instructions: bool,
+    pub trace_stack: bool,
     pub stdout: &'a mut dyn io::Write,
 }
 
@@ -20,7 +21,7 @@ impl std::fmt::Debug for VMConfig<'_> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         return f
             .debug_struct("VMConfig")
-            .field("trace_execution", &self.trace_execution)
+            .field("trace_execution", &self.trace_instructions)
             .finish();
     }
 }
@@ -146,11 +147,6 @@ impl<'a> VM<'a> {
     }
 
     fn trace_instruction(&mut self) -> Result<(), InterpreterError> {
-        vm_print!(self, "          ");
-        for i in 0..self.stack_top {
-            vm_print!(self, "[{}]", self.stack[i]);
-        }
-        vm_print!(self, "\n");
         if let Some((_, decription)) = disassemble_instruction(self.chunk, self.ip) {
             vm_print!(self, "{}\n", decription);
         } else {
@@ -159,9 +155,25 @@ impl<'a> VM<'a> {
         return Ok(());
     }
 
+    fn trace_stack(&mut self) -> Result<(), InterpreterError> {
+        vm_print!(self, "Stack:");
+        for i in 0..self.stack_top {
+            vm_print!(self, "[{}]", self.stack[i]);
+        }
+        vm_print!(self, "\n");
+        return Ok(());
+    }
+
     pub fn run(&mut self) -> Result<Value, InterpreterError> {
+        if self.config.trace_instructions {
+            vm_print!(self, "Tracing execution:\n");
+            vm_print!(self, "Offs Line Instruction\n");
+        }
         loop {
-            if self.config.trace_execution {
+            if self.config.trace_stack {
+                self.trace_stack()?;
+            }
+            if self.config.trace_instructions {
                 self.trace_instruction()?;
             }
             let byte = self.read_byte()?;
@@ -373,7 +385,8 @@ mod tests {
             let mut adapter = StdoutAdapter { f: &mut output };
             let mut vm = VM::new(
                 VMConfig {
-                    trace_execution: false,
+                    trace_instructions: false,
+                    trace_stack: false,
                     stdout: &mut adapter,
                 },
                 &$chunk,
