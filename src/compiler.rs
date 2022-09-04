@@ -538,7 +538,7 @@ mod tests {
             let mut gc = GC::new();
             let source = String::from($program);
             let result = compile(&source, &mut gc);
-            println!("Compile result: {:?}", result);
+            println!("Compile result:\n{:#?}", result);
             (result, gc)
         }};
     }

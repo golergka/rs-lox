@@ -1,7 +1,9 @@
 use crate::rle::*;
 use crate::value::*;
 use num_derive::FromPrimitive;
+use num_traits::FromPrimitive;
 use std::convert::TryFrom;
+use std::fmt;
 
 #[derive(Debug, Clone, Copy, PartialEq, FromPrimitive)]
 pub enum OpCode {
@@ -30,11 +32,20 @@ pub enum OpCode {
 
 pub type LineNumber = i16;
 
-#[derive(Debug)]
 pub struct Chunk {
     code: Vec<u8>,
     constants: ValueArray,
     lines: Rle<LineNumber>,
+}
+
+impl fmt::Debug for Chunk {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Chunk")
+            .field("code", &format_args!("{:#?}", self.code.iter().map(|b| OpCode::from_u8(*b).unwrap()).collect::<Vec<OpCode>>()))
+            .field("constants", &self.constants)
+            .field("lines", &self.lines)
+            .finish()
+    }
 }
 
 impl Chunk {
