@@ -14,6 +14,7 @@ use std::io;
 pub struct VMConfig<'a> {
     pub trace_instructions: bool,
     pub trace_stack: bool,
+    pub trace_globals: bool,
     pub stdout: &'a mut dyn io::Write,
 }
 
@@ -164,6 +165,11 @@ impl<'a> VM<'a> {
         return Ok(());
     }
 
+    fn trace_globals(&mut self) -> Result<(), InterpreterError> {
+        vm_print!(self, "Globals: {:?}\n", self.globals);
+        return Ok(());
+    }
+
     pub fn run(&mut self) -> Result<Value, InterpreterError> {
         if self.config.trace_instructions {
             vm_print!(self, "Tracing execution:\n");
@@ -172,6 +178,9 @@ impl<'a> VM<'a> {
         loop {
             if self.config.trace_stack {
                 self.trace_stack()?;
+            }
+            if self.config.trace_globals {
+                self.trace_globals()?;
             }
             if self.config.trace_instructions {
                 self.trace_instruction()?;
@@ -387,6 +396,7 @@ mod tests {
                 VMConfig {
                     trace_instructions: false,
                     trace_stack: false,
+                    trace_globals: false,
                     stdout: &mut adapter,
                 },
                 &$chunk,

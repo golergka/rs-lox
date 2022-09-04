@@ -29,6 +29,7 @@ fn repl() -> Result<(), Box<dyn Error>> {
             VMConfig {
                 trace_instructions: true,
                 trace_stack: true,
+                trace_globals: true,
                 stdout: &mut stdout,
             },
             &empty_chunk,
@@ -60,6 +61,7 @@ fn run_file(path: &str) -> Result<(), Box<dyn Error>> {
                 VMConfig {
                     trace_instructions: true,
                     trace_stack: true,
+                    trace_globals: true,
                     stdout: &mut stdout,
                 },
                 &chunk,
